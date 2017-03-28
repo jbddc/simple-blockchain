@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Block (
     Block,
     genesis,
@@ -7,43 +9,51 @@ module Block (
 import Crypto.Hash as Cryp
 import Time.System
 import Time.Types
+import GHC.Generics
+import Data.Aeson
 import System.IO.Unsafe
 import Data.Maybe
 import Dat
 import qualified Data.ByteString.Char8 as C8
 
-data Block = Block { 
+data Block = Block {
     index :: Integer,
-    prevHash :: Hash,
+    prevHash :: String,
     timestamp :: String,
     dat :: Dat,
-    blockHash :: Hash
+    blockHash :: String
 }
-    deriving (Show, Eq)
+    deriving (Generic, Show, Eq)
 
-calculateHash :: Integer -> Hash -> String -> Dat -> Hash
-calculateHash index prevH timestamp dat = 
+instance ToJSON Block where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON Block
+
+calculateHash :: Integer -> String -> String -> Dat -> Hash
+calculateHash index prevH timestamp dat =
     let
-        content = concat [show index,show prevH,timestamp,show dat]
+        content = concat [show index,prevH,timestamp,show dat]
         raw_content = C8.pack content
     in
         Cryp.hash raw_content
 
-genesis = 
+genesis :: Block
+genesis =
   let
     ind = 0
     dummyHash = hash $ C8.pack "a" :: Hash
     hashSize = div (length $ show dummyHash) 2
-    pH  = fromJust $ digestFromByteString $ C8.pack $ take hashSize $ repeat '\0' :: Hash
+    pH  = (fromJust . digestFromByteString) . C8.pack $ replicate hashSize '\0' :: Hash
     ts  = show $ unsafePerformIO timeCurrent
     d   = newDat
-  in 
+  in
   Block {
     index = ind,
-    prevHash = pH,
+    prevHash = show pH,
     timestamp = ts,
     dat = d ,
-    blockHash = calculateHash ind pH ts d 
+    blockHash = show $ calculateHash ind (show pH) ts d
   }
 
 createNewBlock :: Dat -> Block -> Block
@@ -51,7 +61,7 @@ createNewBlock d prev_block =
   let
       ind = (+1) $ index prev_block
       pH  = blockHash prev_block
-      ts  = show $ unsafePerformIO timeCurrent 
+      ts  = show $ unsafePerformIO timeCurrent
       newHash = calculateHash ind pH ts d
   in
-      Block {index = ind, prevHash = pH, timestamp = ts, dat = d, blockHash = newHash} 
+      Block {index = ind, prevHash = pH, timestamp = ts, dat = d, blockHash = show newHash}
