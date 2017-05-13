@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     BlockChain
+  exposed-modules:     BlockChain Block Dat
   build-depends:       base >= 4.7 && < 5
                      , cryptonite >= 0.21
                      , bytestring >= 0.10
@@ -23,7 +23,10 @@ library
                      , containers
                      , random
                      , hspread
-                     , aeson
+                     , stm
+                     , aeson 
+                     , bson-generic
+                     , mongoDB
   default-language:    Haskell2010
 
 source-repository head

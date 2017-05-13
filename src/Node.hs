@@ -7,7 +7,12 @@ nodeStartup = undefined
   -- lanch debug vein that allows interaction with connected nodes (check current blockchain state)
 
 consensusVein = undefined
+  -- communicates with other nodes (via spread) to reach a consensus on the BlockChain
 
 servingVein = undefined
+  -- launch REST API to communicate with clients
+  -- recieve Transaction requests and pipe them to "transaction bucket" (internal socket connection?)
+  -- handle application logic? (client registring, group registring, client login etc)
 
 debugVein = undefined
+  -- logger with remote access? (http page maybe)

@@ -1,16 +1,16 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Dat where
 
-
 import qualified Data.Map.Strict as Map
 import Time.Types
 import Data.Aeson
+import Data.Bson.Generic
 import GHC.Generics
 import Crypto.Hash as Cryp
 import qualified Data.ByteString.Char8 as C8
 
 type Hash = Digest SHA256
-type Dat = Map.Map String Transaction
+type Dat = [Transaction]
 
 data Transaction = T {
     fromAddr :: String
@@ -22,20 +22,24 @@ data Transaction = T {
 }
  deriving (Generic,Show,Eq)
 
-instance ToJSON Transaction where
-    toEncoding = genericToEncoding defaultOptions
-
+instance ToJSON Transaction 
 instance FromJSON Transaction
 
+instance ToBSON Transaction
+instance FromBSON Transaction
+
 newDat :: Dat
-newDat = Map.empty
+newDat = []
 
 addTrans :: Transaction -> Dat -> Dat
-addTrans t d = Map.insert (chksum t) t d
+addTrans t = (:) t 
+
+numTransactions :: Dat -> Int
+numTransactions = length 
 
 createTransaction :: String -> String -> Double -> String -> String -> Transaction
-createTransaction fAddr tAddr val msg ts= 
+createTransaction fAddr tAddr val msg ts=
     let
-      csum = hash $ C8.pack $ concat $ [fAddr,tAddr,show val,msg,ts] :: Hash
+      csum = ((hash . C8.pack) . concat) [fAddr,tAddr,show val,msg,ts] :: Hash
     in
       T { fromAddr = fAddr, toAddr = tAddr, value = val, message = msg, tstamp = ts, chksum = show csum}

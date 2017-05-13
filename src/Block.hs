@@ -11,6 +11,7 @@ import Time.System
 import Time.Types
 import GHC.Generics
 import Data.Aeson
+import Data.Bson.Generic
 import System.IO.Unsafe
 import Data.Maybe
 import Dat
@@ -25,10 +26,11 @@ data Block = Block {
 }
     deriving (Generic, Show, Eq)
 
-instance ToJSON Block where
-  toEncoding = genericToEncoding defaultOptions
-
+instance ToJSON Block
 instance FromJSON Block
+
+instance ToBSON Block
+instance FromBSON Block
 
 calculateHash :: Integer -> String -> String -> Dat -> Hash
 calculateHash index prevH timestamp dat =
@@ -55,6 +57,21 @@ genesis =
     dat = d ,
     blockHash = show $ calculateHash ind (show pH) ts d
   }
+
+data BlockBuilder = BBuilder {
+    prevBlock :: Block,
+    currentDat :: Dat,
+    size :: Int
+}
+  deriving (Show)
+
+addTransaction :: Transaction -> BlockBuilder -> Either BlockBuilder Block
+addTransaction trans bb =
+  let
+    sz = size bb
+    currDat = currentDat bb
+    currsz = numTransactions currDat
+    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BBuilder{prevBlock = prevBlock bb, currentDat = addTrans trans currDat, size = size bb})
 
 createNewBlock :: Dat -> Block -> Block
 createNewBlock d prev_block =
