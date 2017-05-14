@@ -2,6 +2,7 @@
 
 module Block (
     Block,
+    blockHash,
     genesis,
     createNewBlock
 ) where
@@ -18,11 +19,11 @@ import Dat
 import qualified Data.ByteString.Char8 as C8
 
 data Block = Block {
-    index :: Integer,
-    prevHash :: String,
-    timestamp :: String,
-    dat :: Dat,
-    blockHash :: String
+    index :: !Integer,
+    prevHash :: !String,
+    timestamp :: !String,
+    dat :: !Dat,
+    blockHash :: !String
 }
     deriving (Generic, Show, Eq)
 

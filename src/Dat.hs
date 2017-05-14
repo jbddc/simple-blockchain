@@ -13,12 +13,12 @@ type Hash = Digest SHA256
 type Dat = [Transaction]
 
 data Transaction = T {
-    fromAddr :: String
-    , toAddr :: String
-    , value :: Double
-    , message :: String
-    , tstamp :: String
-    , chksum :: String
+    fromAddr :: !String
+    , toAddr :: !String
+    , value :: !Double
+    , message :: !String
+    , tstamp :: !String
+    , chksum :: !String
 }
  deriving (Generic,Show,Eq)
 

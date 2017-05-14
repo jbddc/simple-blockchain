@@ -1,1 +1,1 @@
-module Node.Debug where
+module Debug where

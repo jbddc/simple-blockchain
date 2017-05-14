@@ -1,22 +1,30 @@
-module BlockChain where
+{-# LANGUAGE OverloadedStrings #-}
+
+module BlockChain ( runQuery
+    , insertBlock
+    , getBlockByIndex
+    , getBlock
+    , getNrBlocks
+) where
 
 import Block
 import Dat
+import Data.Maybe
+import Database.MongoDB
+import Data.Bson.Generic
 
 dbName = "bsw_blockchain"
 
-type Chain = [Block]
+runQuery pipe action = access pipe master dbName action
 
-blockchain = [genesis]
+insertBlock :: Block ->  Action IO Value
+insertBlock b = insert "blocks" (toBSON b)
 
-addBlock :: Block -> Chain -> Chain
-addBlock x l = x:l
+getBlockByIndex :: Int -> Action IO (Maybe Block)
+getBlockByIndex index = (maybe Nothing (\x -> fromBSON x :: Maybe Block)) `fmap` findOne (select ["index" =: index] "blocks")
+    
+getNrBlocks :: Action IO Int
+getNrBlocks = count (select []  "blocks")
 
-lastBlock :: Chain -> Block
-lastBlock = head
-
-numBlocks :: Chain -> Integer
-numBlocks = undefined
-
-getBlock :: Chain -> Integer -> Block
-getBlock = undefined
+getBlock :: String -> Action IO (Maybe Block)
+getBlock blockHash = (maybe Nothing (\x -> fromBSON x :: Maybe Block)) `fmap` findOne (select ["blockHash" =: blockHash] "blocks")
