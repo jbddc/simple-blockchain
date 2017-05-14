@@ -15,4 +15,5 @@ packages:
 extra-deps:
 - bson-generic-0.0.8.1
 - text-1.2.1.3
+- scotty-tls-0.4.1
 resolver: lts-6.30
