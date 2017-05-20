@@ -17,8 +17,9 @@ nodeStartup = do
 consensusVein = undefined
   -- communicates with other nodes (via spread) to reach a consensus on the BlockChain
 
-servingVein = undefined
+servingVein dbPipe = undefined
   -- launch REST API to communicate with clients
+  runApiServer dbPipe
   -- recieve Transaction requests and pipe them to "transaction bucket" (internal socket connection?)
   -- handle application logic? (client registring, group registring, client login etc)
 
