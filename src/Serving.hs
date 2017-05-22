@@ -1,34 +1,38 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Serving where
 
 import Block
+import Dat
 import Data.Maybe
 import Data.Aeson (encode)
 import Web.Scotty
-import Network.Wai.Middleware.HttpAuth (basicAuth)
-import Network.HTTP.Types.Status (ok200, internalServerError500, notFound404)
+import Network.Wai.Middleware.HttpAuth (basicAuth')
+import Network.Wai.Internal (pathInfo)
+import Network.HTTP.Types.Status (ok200, accepted202, badRequest400, notFound404, conflict409, internalServerError500)
 import BlockChain
+import Control.Monad
+import System.IO.Unsafe
+import System.IO
+import qualified Data.Text.Lazy as Text
 --import Web.Scotty.TLS
 
 runApiServerHTTPS = undefined 
 
-password = "user"
+password = "usr"
 
 runApiServer pipe cache = do
     putStrLn "Starting Server..."
     scotty 3000 $ do
-        middleware $ basicAuth (\u p -> return $ u == "user" && p == password) "BSW Server"
+        middleware $ basicAuth' (\req u p -> if fromMaybe "" (listToMaybe (pathInfo req)) == "newuser" then return True else return (p==password)) "BSW Server"
 
-        get "/login" $ do
-            status ok200
+        post "/newuser" $ do
+            usr <- Just `fmap` (jsonData :: ActionM UserRegister) `rescue` (\_ -> status badRequest400 >> return Nothing)
+            case usr of
+                Just x -> status ok200
+                Nothing -> return ()
         
-        -- hello world
-        get "/echo/:val" $ do
-            id <- param "val"
-            either (liftAndCatchIO . print) text (parseParam id)
-        
-
         -- get user by username
         get "/users/:username" $ do
            uname <- param "username"

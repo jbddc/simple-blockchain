@@ -31,6 +31,7 @@ library
                      , scotty
                      , scotty-tls
                      , http-types
+                     , wai
                      , wai-extra
                      , stm
                      , securemem
