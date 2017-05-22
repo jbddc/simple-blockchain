@@ -3,6 +3,7 @@
 module Block (
     Block,
     blockHash,
+    dat,
     genesis,
     createNewBlock
 ) where
@@ -72,7 +73,7 @@ addTransaction trans bb =
     sz = size bb
     currDat = currentDat bb
     currsz = numTransactions currDat
-    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BBuilder{prevBlock = prevBlock bb, currentDat = addTrans trans currDat, size = size bb})
+    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BBuilder{prevBlock = prevBlock bb, currentDat = addRecord (T trans) currDat, size = size bb})
 
 createNewBlock :: Dat -> Block -> Block
 createNewBlock d prev_block =

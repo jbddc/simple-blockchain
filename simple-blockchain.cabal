@@ -30,6 +30,10 @@ library
                      , mongoDB
                      , scotty
                      , scotty-tls
+                     , http-types
+                     , wai-extra
+                     , stm
+                     , securemem
   default-language:    Haskell2010
 
 source-repository head
