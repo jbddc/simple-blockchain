@@ -54,4 +54,4 @@ runApiServer pipe cache = do
         -- get block by hash code 
         get "/blockchain/byHash/:blockHash" $ do
             blockHash <- param "blockHash"
-            either (\_ -> status internalServerError500) (\x -> do {res <- liftAndCatchIO $ runQuery pipe $ getBlockByHash x;json res;}) (parseParam blockHash)
+            either (\_ -> status internalServerError500) (\x -> do {res <- liftAndCatchIO $ runQuery pipe $ getBlockByHash x;maybe (status notFound404) (\x -> json x) res;}) (parseParam blockHash)

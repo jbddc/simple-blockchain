@@ -67,13 +67,13 @@ data BlockBuilder = BBuilder {
 }
   deriving (Show)
 
-addTransaction :: Transaction -> BlockBuilder -> Either BlockBuilder Block
-addTransaction trans bb =
+addTransaction :: Record -> BlockBuilder -> Either BlockBuilder Block
+addTransaction rec bb =
   let
     sz = size bb
     currDat = currentDat bb
     currsz = numTransactions currDat
-    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BBuilder{prevBlock = prevBlock bb, currentDat = addRecord (T trans) currDat, size = size bb})
+    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BBuilder{prevBlock = prevBlock bb, currentDat = addRecord rec currDat, size = size bb})
 
 createNewBlock :: Dat -> Block -> Block
 createNewBlock d prev_block =

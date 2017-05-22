@@ -102,8 +102,8 @@ fetchUser cache pipe usr = do
       case userReg of
         Just (UR (UserRegister { pw = pwd })) -> do
           let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
-          let cur_block_nr = undefined
-          let found_user = User { uname = usr , password = pwd , memberGroups = gs , blockstamp = cur_block_nr }
+          cur_block_nr <- (1-) `fmap` runQuery pipe getNrBlocks
+          let found_user = User { uname = usr , password = pwd , memberGroups = gs , blockstamp = show cur_block_nr }
           update_cache found_user uc gc
           encodeResp found_user
         _ -> return Nothing

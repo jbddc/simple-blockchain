@@ -81,9 +81,13 @@ addRecord t = (:) t
 numTransactions :: Dat -> Int
 numTransactions = length 
 
-createTransaction :: String -> String -> Double -> String -> String -> Transaction
+
+registerUser :: String -> String -> Record
+registerUser username password = UR $ UserRegister { name = username , pw = password }
+
+createTransaction :: String -> String -> Double -> String -> String -> Record
 createTransaction fAddr tAddr val msg ts=
     let
       csum = ((hash . C8.pack) . concat) [fAddr,tAddr,show val,msg,ts] :: Hash
     in
-      Transaction { fromAddr = fAddr, toAddr = tAddr, value = val, message = msg, tstamp = ts, chksum = show csum}
+      T $ Transaction { fromAddr = fAddr, toAddr = tAddr, value = val, message = msg, tstamp = ts, chksum = show csum}
