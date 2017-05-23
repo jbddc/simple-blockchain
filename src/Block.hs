@@ -2,9 +2,15 @@
 
 module Block (
     Block,
+    BlockBuilder,
+    genesis,
+    newBB,
+    prevBlock,
+    currentDat,
+    size,
     blockHash,
     dat,
-    genesis,
+    addRec,
     createNewBlock
 ) where
 
@@ -60,20 +66,23 @@ genesis =
     blockHash = show $ calculateHash ind (show pH) ts d
   }
 
-data BlockBuilder = BBuilder {
+data BlockBuilder = BlockBuilder {
     prevBlock :: Block,
     currentDat :: Dat,
     size :: Int
 }
   deriving (Show)
 
-addTransaction :: Record -> BlockBuilder -> Either BlockBuilder Block
-addTransaction rec bb =
+newBB :: Block -> Int -> BlockBuilder
+newBB b s = BlockBuilder { prevBlock = b, currentDat = newDat, size = s}
+
+addRec :: Record -> BlockBuilder -> Either BlockBuilder Block
+addRec rec bb =
   let
     sz = size bb
     currDat = currentDat bb
     currsz = numTransactions currDat
-    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BBuilder{prevBlock = prevBlock bb, currentDat = addRecord rec currDat, size = size bb})
+    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BlockBuilder{prevBlock = prevBlock bb, currentDat = addRecord rec currDat, size = size bb})
 
 createNewBlock :: Dat -> Block -> Block
 createNewBlock d prev_block =

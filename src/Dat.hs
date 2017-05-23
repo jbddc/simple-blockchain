@@ -22,8 +22,9 @@ instance ToBSON Record
 instance FromBSON Record
 
 data Transaction = Transaction {
-    fromAddr :: !String ,
-    toAddr   :: !String ,
+    fromUser :: !String ,
+    toUser   :: !String ,
+    group    :: !String ,
     value    :: !Double ,
     message  :: !String ,
     tstamp   :: !String ,
@@ -38,7 +39,8 @@ instance ToBSON Transaction
 instance FromBSON Transaction
 
 data GroupRegister = GroupRegister {
-     testum :: !String 
+     identifier :: !String ,
+     description :: !String
     }
  deriving (Generic,Show,Eq)
 
@@ -85,9 +87,9 @@ numTransactions = length
 registerUser :: String -> String -> Record
 registerUser username password = UR $ UserRegister { name = username , pw = password }
 
-createTransaction :: String -> String -> Double -> String -> String -> Record
-createTransaction fAddr tAddr val msg ts=
+createTransaction :: String -> String -> String -> Double -> String -> String -> Record
+createTransaction fAddr tAddr g val msg ts=
     let
       csum = ((hash . C8.pack) . concat) [fAddr,tAddr,show val,msg,ts] :: Hash
     in
-      T $ Transaction { fromAddr = fAddr, toAddr = tAddr, value = val, message = msg, tstamp = ts, chksum = show csum}
+      T $ Transaction { fromUser = fAddr, toUser = tAddr, group = g, value = val, message = msg, tstamp = ts, chksum = show csum}

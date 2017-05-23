@@ -1,8 +1,18 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Group where
 
+import GHC.Generics
+import Data.Aeson
+
 data Group = G {
-    id :: String ,
+    ident :: String ,
     users :: [String] ,
     transactions :: [String] ,
-    blockstamp :: String
+    desc :: String ,
+    bstamp :: String
 }
+  deriving (Generic,Show,Eq)
+
+instance ToJSON Group 
+instance FromJSON Group

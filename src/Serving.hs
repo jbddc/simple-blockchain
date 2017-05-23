@@ -16,16 +16,13 @@ import Control.Monad
 import System.IO.Unsafe
 import System.IO
 import qualified Data.Text.Lazy as Text
+import qualified Data.ByteString.Char8 as BS
 --import Web.Scotty.TLS
-
-runApiServerHTTPS = undefined 
-
-password = "usr"
 
 runApiServer pipe cache = do
     putStrLn "Starting Server..."
-    scotty 3000 $ do
-        middleware $ basicAuth' (\req u p -> if fromMaybe "" (listToMaybe (pathInfo req)) == "newuser" then return True else return (p==password)) "BSW Server"
+    scotty 9000 $ do
+        middleware $ basicAuth' (\req u p -> if fromMaybe "" (listToMaybe (pathInfo req)) == "newuser" then return True else userLogin cache pipe (BS.unpack u) (BS.unpack p)) "BSW Server"
 
         post "/newuser" $ do
             usr <- Just `fmap` (jsonData :: ActionM UserRegister) `rescue` (\_ -> status badRequest400 >> return Nothing)
@@ -43,6 +40,12 @@ runApiServer pipe cache = do
                    maybe (status notFound404) (json) res
                ) 
                (parseParam uname)
+       
+        post "/groupreg" $ do
+           greg <- Just `fmap` (jsonData :: ActionM GroupRegister) `rescue` (\_ -> status badRequest400 >> return Nothing)
+           case greg of
+               Just x -> (liftAndCatchIO $ registerGroup cache pipe x) >> status ok200
+               Nothing -> return ()
 
         -- get block by index
         get "/blockchain/byIndex/:blockIndex" $ do
