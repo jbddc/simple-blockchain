@@ -11,6 +11,7 @@ module BlockChain ( runQuery
     , fetchGroup
     , userLogin
     , registerGroup
+    , regUser
 ) where
 
 import Block
@@ -182,4 +183,21 @@ registerGroup cache pipe gr = do
            atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = new_bb }) 
         ) 
         (addRec (GR gr) b)
+      return True
+
+regUser :: TVar Cache -> Pipe -> UserRegister -> IO Bool
+regUser cache pipe ureg = do
+  usr <- fetchUser cache pipe (name ureg)
+  case usr of
+    Just x -> return False
+    Nothing -> do
+      Cache { usersCache = uc, groupsCache = gc, blockBucket = b } <- readTVarIO cache
+      either
+        (\ bb -> atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = bb}))
+        (\newBlock -> do
+          _ <- runQuery pipe (insertBlock newBlock)
+          let new_bb = newBB newBlock (size b)
+          atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = new_bb})
+        )
+        (addRec (UR ureg) b)
       return True

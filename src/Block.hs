@@ -74,7 +74,9 @@ data BlockBuilder = BlockBuilder {
   deriving (Show)
 
 newBB :: Block -> Int -> BlockBuilder
-newBB b s = BlockBuilder { prevBlock = b, currentDat = newDat, size = s}
+newBB b s
+  | s<=0 =  BlockBuilder { prevBlock = b, currentDat = newDat, size = 1}
+  | otherwise =  BlockBuilder { prevBlock = b, currentDat = newDat, size = s}
 
 addRec :: Record -> BlockBuilder -> Either BlockBuilder Block
 addRec rec bb =
@@ -82,7 +84,10 @@ addRec rec bb =
     sz = size bb
     currDat = currentDat bb
     currsz = numTransactions currDat
-    in if sz == currsz then Right (createNewBlock currDat (prevBlock bb)) else Left (BlockBuilder{prevBlock = prevBlock bb, currentDat = addRecord rec currDat, size = size bb})
+    updated_dat = addRecord rec currDat
+    updated_bb = BlockBuilder{prevBlock = prevBlock bb, currentDat = updated_dat, size = size bb}
+  in 
+    if sz == (currsz+1) then Right (createNewBlock updated_dat (prevBlock bb)) else Left updated_bb
 
 createNewBlock :: Dat -> Block -> Block
 createNewBlock d prev_block =

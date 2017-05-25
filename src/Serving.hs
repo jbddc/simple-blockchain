@@ -27,7 +27,9 @@ runApiServer pipe cache = do
         post "/newuser" $ do
             usr <- Just `fmap` (jsonData :: ActionM UserRegister) `rescue` (\_ -> status badRequest400 >> return Nothing)
             case usr of
-                Just x -> status ok200
+                Just x -> do
+                    res <- liftAndCatchIO $ regUser cache pipe x
+                    if res then status ok200 else status conflict409
                 Nothing -> return ()
         
         -- get user by username
