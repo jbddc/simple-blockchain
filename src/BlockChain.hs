@@ -6,6 +6,7 @@ module BlockChain ( runQuery
     , getBlockByHash
     , getNrBlocks
     , getBlocks
+    , Cache
     , mkCache
     , fetchUser
     , fetchGroup

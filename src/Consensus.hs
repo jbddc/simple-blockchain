@@ -13,13 +13,16 @@ import Spread.Client
 import Control.Concurrent.Chan.Closeable
 import Dat
 import Block
+import BlockChain
+
+type Bucket = TVar BlockBuilder
 
 group :: PrivateGroup
 group = fromJust $ makeGroup "consensus"
 
-sendBlock :: Block -> Connection -> IO ()
-sendBlock block conn = do
-  let msg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = BSL.toStrict $ encode block, outGroups = [group], outMsgType = 1}
+sendBlock :: Connection -> Block -> IO ()
+sendBlock conn block = do
+  let msg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = BSL.toStrict $ encode block, outGroups = [Consensus.group], outMsgType = 1}
   send msg conn
 
 listenNetworkBlocks :: (Chan R Message, Connection) -> IO ()
@@ -32,6 +35,14 @@ listenNetworkBlocks (chan,conn) = do
     _ -> putStrLn "TODO"
   listenNetworkBlocks (chan,conn)
 
+processRecord :: Connection -> Record -> Bucket -> IO ()
+processRecord conn rec bucket = do
+  _bucket <- readTVarIO bucket
+  either 
+    (\bb -> atomically $ writeTVar bucket bb)
+    (sendBlock conn)
+    (addRec rec _bucket)
+
 name :: IO PrivateName
 name = do
   time <- timeCurrent
@@ -40,11 +51,11 @@ name = do
   let h = hash $ B.pack preH :: Digest SHA256
   return . mkPrivateName . B.pack . show $ h
 
-startConsensus :: IO ()
-startConsensus = do
-  n <- name
-  let config = Conf { address = Nothing , port = Nothing, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
+startConsensus :: Cache -> Bucket -> IO ()
+startConsensus cache bucket = do
+  n <- Consensus.name
+  let config = Conf { address = Just "alcetipe.dydns.org" , port = Just 4803, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
   (chan,conn) <- connect config
-  join group conn
+  join Consensus.group conn
   --listener <- Concurrent.forkIO $ listenNetworkBlocks
   listenNetworkBlocks (chan,conn)
