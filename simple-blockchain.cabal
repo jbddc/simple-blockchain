@@ -16,7 +16,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     BlockChain Block Dat Serving
-  build-depends:       base >= 4.7 && < 5
+  build-depends:       base >= 3 && < 5
                      , cryptonite >= 0.21
                      , bytestring >= 0.10
                      , hourglass
@@ -25,9 +25,9 @@ library
                      , hspread
                      , stm
                      , aeson 
-                     , bson-generic
+                     , bson-generic 
                      , text
-                     , mongoDB
+                     , mongoDB >= 2.0
                      , scotty
                      , scotty-tls
                      , http-types

@@ -1,19 +1,15 @@
-flags:
-  text:
-    integer-simple: false
+flags: {}
 extra-package-dbs: []
 packages:
 - '.'
 - location:
-    git: https://github.com/philopon/abeson
-    commit: d4b8b4afe9f489f1c3f4a67fee5484877900693d
-  extra-dep: true
-- location:
     git: https://github.com/jbddc/hspread.git
     commit: 1a912c0f97624fe04a45eee2e27af468ae17fd5e
   extra-dep: true
+- location:
+    git: https://github.com/Palmik/bson-generic.git
+    commit: e078def65d0dee1ea7e3205f445e47d5937851f3
+  extra-dep: true
 extra-deps:
-- bson-generic-0.0.8.1
-- text-1.2.1.3
 - scotty-tls-0.4.1
-resolver: lts-6.30
+resolver: lts-8.5

@@ -54,7 +54,7 @@ name = do
 startConsensus :: IO ()
 startConsensus = do
   n <- Consensus.name
-  let config = Conf { address = Just "localhost" , port = Just 4803, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
+  let config = Conf { address = Just "alcetipe.dyndns.org" , port = Nothing, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
   (chan,conn) <- connect config
   join Consensus.group conn
   --listener <- Concurrent.forkIO $ listenNetworkBlocks
