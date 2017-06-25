@@ -6,6 +6,7 @@ module BlockChain ( runQuery
     , getBlockByHash
     , getNrBlocks
     , getBlocks
+    , getLastBlock
     , Cache
     , mkCache
     , fetchUser
@@ -82,6 +83,11 @@ getNrBlocks = count (select []  "blocks")
 
 getBlockByHash :: String -> Action IO (Maybe Block)
 getBlockByHash blockHash = (maybe Nothing (\x -> fromBSON x :: Maybe Block)) `fmap` findOne (select ["blockHash" =: blockHash] "blocks")
+
+getLastBlock :: Action IO (Maybe Block)
+getLastBlock = do
+  nr <- getNrBlocks
+  if nr==0 then return Nothing else getBlockByIndex (nr-1)
 
 getBlocks :: Action IO [Block]
 getBlocks = do

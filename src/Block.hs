@@ -10,6 +10,7 @@ module Block (
     size,
     blockHash,
     dat,
+    index,
     addRec,
     createNewBlock
 ) where
