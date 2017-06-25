@@ -8,6 +8,7 @@ module BlockChain ( runQuery
     , getBlocks
     , getLastBlock
     , Cache
+    , blockBucket
     , mkCache
     , fetchUser
     , fetchGroup
@@ -62,6 +63,7 @@ data Cache = Cache {
   groupsCache :: !(Queue G.Group) ,
   blockBucket :: BlockBuilder
 }
+ deriving (Show)
 
 mkCache :: Int -> Int -> Block -> Cache
 mkCache x s b = Cache { usersCache = mkQueue x, groupsCache = mkQueue x, blockBucket = newBB b s}

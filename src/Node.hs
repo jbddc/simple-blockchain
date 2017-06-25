@@ -5,6 +5,7 @@ import Serving
 import BlockChain
 import Block
 import Consensus
+import Control.Concurrent
 import Control.Concurrent.STM.TVar
 
 dbConnect = connect (host "127.0.0.1")
@@ -22,22 +23,19 @@ nodeStartup = do
       _ <- runQuery pipe (insertBlock genesis) 
       cache <- newTVarIO $ mkCache 1000 1 genesis 
       servingVein pipe cache
-      consensusVein pipe)
+      consensusVein pipe cache)
     (\justBls -> do
       cache <- newTVarIO $ mkCache 1000 1 justBls 
       servingVein pipe cache
-      consensusVein pipe) 
+      consensusVein pipe cache) 
     bls
 
-
-
-
 -- | Communicates with other nodes (via spread) to reach a consensus on the BlockChain
-consensusVein = startConsensus
+consensusVein pipe cache = forkIO $ startConsensus pipe cache
 
 servingVein dbPipe cache = do
   -- launch REST API to communicate with clients
-  runApiServer dbPipe cache
+  forkIO $ runApiServer dbPipe cache
   -- recieve Transaction requests and pipe them to "transaction bucket" (internal socket connection?)
 
 debugVein = undefined

@@ -30,8 +30,8 @@ sendBlock conn block = do
   let msg = Outgoing {outOrdering = Fifo, outDiscard = False, outData = BSL.toStrict $ encode block, outGroups = [Consensus.group], outMsgType = 1}
   send msg conn
 
-listenNetworkBlocks :: Mongo.Pipe -> (Chan R Message, Connection) -> IO ()
-listenNetworkBlocks pipe (chan,conn) = do
+listenNetworkBlocks :: Mongo.Pipe -> TVar Cache -> (Chan R Message, Connection) -> IO ()
+listenNetworkBlocks pipe cache (chan,conn) = do
   msg <- readChan chan
   case msg of
     Just (Regular inMsg) -> do
@@ -54,7 +54,7 @@ listenNetworkBlocks pipe (chan,conn) = do
     Just (Membership memMsg) -> putStrLn $ show $ numMembers memMsg
     Nothing -> putStrLn "Bad message..."
     _ -> putStrLn "TODO"  
-  listenNetworkBlocks pipe (chan,conn)
+  listenNetworkBlocks pipe cache (chan,conn)
 
 randomFalseTrue :: IO Bool
 randomFalseTrue = do
@@ -83,51 +83,64 @@ name = do
   return . mkPrivateName . B.pack . show $ h
 
 -- WARNING: IR BUSCAR BLOCOS ATÉ AO MAIS RECENTE
-startConsensus :: Mongo.Pipe -> IO ()
-startConsensus pipe = do
+startConsensus :: Mongo.Pipe -> TVar Cache -> IO ()
+startConsensus pipe cache = do
   n <- Consensus.name
   let config = Conf { address = Just "localhost" , port = Nothing, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
   (chan,conn) <- connect config
   join Consensus.group conn
   startReceive conn
   (numMembers,blocksMap) <- getNumMembers Map.empty chan
-  if numMembers <= 0
+  if numMembers <= 1
     then do
       mapM_ (\b -> parseInsertBlock pipe b (fromIntegral $ Block.index b)) $ elems blocksMap
-      listenNetworkBlocks pipe (chan,conn)
+      _cache <- readTVarIO cache
+      let old_bb = blockBucket _cache
+      last_block <- runQuery pipe getLastBlock
+      maybe (return ()) (\last_b -> atomically $ writeTVar cache (_cache { blockBucket = old_bb { Block.prevBlock = last_b } })) last_block
+      listenNetworkBlocks pipe cache (chan,conn)
       disconnect conn
     else do
-      currentIndex <- (1-) `fmap` runQuery pipe getNrBlocks
+      currentIndex <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
       let indReqMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack "", outGroups = [Consensus.group], outMsgType = 3}
       send indReqMsg conn
       (index,blocksMap') <- recvIndex blocksMap chan
       blocksMap'' <- syncFromTo blocksMap' pipe (currentIndex+1) index (chan,conn)
       mapM_ (\b -> parseInsertBlock pipe b (fromIntegral $ Block.index b)) $ elems blocksMap''
-      listenNetworkBlocks pipe (chan,conn)
+      _cache <- readTVarIO cache
+      let old_bb = blockBucket _cache
+      last_block <- runQuery pipe getLastBlock
+      maybe (return ()) (\last_b -> atomically $ writeTVar cache (_cache { blockBucket = old_bb { Block.prevBlock = last_b } })) last_block
+      listenNetworkBlocks pipe cache (chan,conn)
       disconnect conn
 
 consensusHandshake :: Mongo.Pipe -> IO (Maybe Block.Block)
 consensusHandshake pipe = do
     -- criar nome temporario
     tempName <- Consensus.name
+    putStr  "Name created: " >> print tempName
     -- obter o bloco mais recente (WARNING: posso nao ter blocos)
-    currentIndex <- (1-) `fmap` runQuery pipe getNrBlocks
+    currentIndex <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
+    putStr  "Current Index: " >> print currentIndex
     -- establish connection
     let config = Conf { address = Nothing , port = Nothing, desiredName = tempName, priority = False, groupMembership = True, authMethods = [] }
     (chan,conn) <- connect config
-    -- juntar ao grupo "consensus"
     join Consensus.group conn
     startReceive conn
     (numMembers,_) <- getNumMembers Map.empty chan 
-    if numMembers <= 0 
+    putStr  "numMembers: " >> print numMembers
+    if numMembers <= 1 
       then do
         disconnect conn
+        putStrLn "Leaving..."
         -- retornar ultimo bloco actual para dar startup à cache
         runQuery pipe getLastBlock
       else do
+        putStrLn "Syncing..."
         let indReqMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack "", outGroups = [Consensus.group], outMsgType = 3}
         send indReqMsg conn
         (index,_) <- recvIndex Map.empty chan
+        putStrLn "Index: " >> print index
         -- ir buscar blocos entre aquele que eu tenho na BD e o bloco mais recente da rede
         syncFromTo Map.empty pipe (currentIndex+1) index (chan,conn)
         disconnect conn
