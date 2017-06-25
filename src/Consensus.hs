@@ -32,7 +32,6 @@ sendBlock conn block = do
 
 listenNetworkBlocks :: Mongo.Pipe -> (Chan R Message, Connection) -> IO ()
 listenNetworkBlocks pipe (chan,conn) = do
-  result <- startReceive conn
   msg <- readChan chan
   case msg of
     Just (Regular inMsg) -> do
@@ -90,12 +89,22 @@ startConsensus pipe = do
   let config = Conf { address = Just "localhost" , port = Nothing, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
   (chan,conn) <- connect config
   join Consensus.group conn
-  --mapM_ treatBlock $ elems blockMap'
-  listenNetworkBlocks pipe (chan,conn)
-  disconnect conn
-
-treatBlock :: Block.Block -> IO ()
-treatBlock = undefined
+  startReceive conn
+  (numMembers,blocksMap) <- getNumMembers Map.empty chan
+  if numMembers <= 0
+    then do
+      mapM_ (\b -> parseInsertBlock pipe b (fromIntegral $ Block.index b)) $ elems blocksMap
+      listenNetworkBlocks pipe (chan,conn)
+      disconnect conn
+    else do
+      currentIndex <- (1-) `fmap` runQuery pipe getNrBlocks
+      let indReqMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack "", outGroups = [Consensus.group], outMsgType = 3}
+      send indReqMsg conn
+      (index,blocksMap') <- recvIndex blocksMap chan
+      blocksMap'' <- syncFromTo blocksMap' pipe (currentIndex+1) index (chan,conn)
+      mapM_ (\b -> parseInsertBlock pipe b (fromIntegral $ Block.index b)) $ elems blocksMap''
+      listenNetworkBlocks pipe (chan,conn)
+      disconnect conn
 
 consensusHandshake :: Mongo.Pipe -> IO (Maybe Block.Block)
 consensusHandshake pipe = do
@@ -109,7 +118,7 @@ consensusHandshake pipe = do
     -- juntar ao grupo "consensus"
     join Consensus.group conn
     startReceive conn
-    numMembers <- getNumMembers chan 
+    (numMembers,_) <- getNumMembers Map.empty chan 
     if numMembers <= 0 
       then do
         disconnect conn
@@ -118,37 +127,49 @@ consensusHandshake pipe = do
       else do
         let indReqMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack "", outGroups = [Consensus.group], outMsgType = 3}
         send indReqMsg conn
-        index <- recvIndex chan
+        (index,_) <- recvIndex Map.empty chan
         -- ir buscar blocos entre aquele que eu tenho na BD e o bloco mais recente da rede
-        syncFromTo pipe (currentIndex+1) index (chan,conn)
+        syncFromTo Map.empty pipe (currentIndex+1) index (chan,conn)
         disconnect conn
         -- retornar ultimo bloco actual para dar startup à cache
         runQuery pipe getLastBlock
 
-getNumMembers :: Chan R Message -> IO Int
-getNumMembers chan = do
+getNumMembers :: Map.Map Integer Block.Block -> Chan R Message -> IO (Int,Map.Map Integer Block.Block)
+getNumMembers blocksMap chan = do
   m <- readChan chan
   case m of
-    Just (Membership memMsg) -> return $ numMembers memMsg
-    _ -> getNumMembers chan
+    Just (Membership memMsg) -> return $ (numMembers memMsg,blocksMap)
+    Just (Regular msg) -> case inMsgType msg of
+         1 -> 
+           maybe 
+            (getNumMembers blocksMap chan) 
+            (\bl -> getNumMembers (insert (Block.index bl) bl blocksMap) chan) 
+            (decode $ BSL.fromStrict $ inData msg :: Maybe Block.Block)
+         _ -> getNumMembers blocksMap chan
+    _ -> getNumMembers blocksMap chan
 
-recvIndex :: (Chan R Message) -> IO Int
-recvIndex chan = do
+recvIndex :: Map.Map Integer Block.Block -> (Chan R Message) -> IO (Int,Map.Map Integer Block.Block)
+recvIndex blocksMap chan = do
      m <- readChan chan  
      case m of
        Just (Regular msg) -> case inMsgType msg of
-         4 -> return $ read $ B.unpack $ inData msg
-         _ -> recvIndex chan
-       _ -> recvIndex chan
+         1 -> 
+           maybe 
+            (recvIndex blocksMap chan) 
+            (\bl -> recvIndex (insert (Block.index bl) bl blocksMap) chan) 
+            (decode $ BSL.fromStrict $ inData msg :: Maybe Block.Block)
+         4 -> return $ (read $ B.unpack $ inData msg,blocksMap)
+         _ -> recvIndex blocksMap chan
+       _ -> recvIndex blocksMap chan
 
-syncFromTo :: Mongo.Pipe -> Int -> Int -> (Chan R Message,Connection) -> IO ()
-syncFromTo pipe from to (chan,conn) = do
+syncFromTo :: Map.Map Integer Block.Block -> Mongo.Pipe -> Int -> Int -> (Chan R Message,Connection) -> IO (Map.Map Integer Block.Block)
+syncFromTo blocksMap pipe from to (chan,conn) = do
     let firstMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show from, outGroups = [Consensus.group], outMsgType = 2}
     send firstMsg conn
-    auxSyncFromTo pipe from to (chan,conn)
+    auxSyncFromTo blocksMap pipe from to (chan,conn)
 
-auxSyncFromTo :: Mongo.Pipe -> Int -> Int -> (Chan R Message,Connection) -> IO ()
-auxSyncFromTo pipe from to (chan,conn) 
+auxSyncFromTo :: Map.Map Integer Block.Block -> Mongo.Pipe -> Int -> Int -> (Chan R Message,Connection) -> IO (Map.Map Integer Block.Block)
+auxSyncFromTo blocksMap pipe from to (chan,conn) 
   | from <= to = do
       m <- readChan chan
       case m of
@@ -158,25 +179,25 @@ auxSyncFromTo pipe from to (chan,conn)
             (do
               let retryMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show from, outGroups = [Consensus.group], outMsgType = 2}
               send retryMsg conn
-              auxSyncFromTo pipe from to (chan,conn)
+              auxSyncFromTo blocksMap pipe from to (chan,conn)
             )
             (\blck -> parseInsertBlock pipe blck from >>= (\x -> case x of
-              IndexMismatch -> auxSyncFromTo pipe from to (chan,conn)
+              IndexMismatch -> auxSyncFromTo (Map.insert (Block.index blck) blck blocksMap) pipe from to (chan,conn)
               HashMismatch -> do
                 let retryMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show from, outGroups = [Consensus.group], outMsgType = 2}
                 send retryMsg conn
-                auxSyncFromTo pipe from to (chan,conn)
+                auxSyncFromTo (Map.insert (Block.index blck) blck blocksMap) pipe from to (chan,conn)
               DatabaseError -> error "Database Error!"
               OK -> do
-                if from==to then return () else do
+                if from==to then return blocksMap else do
                   let nextMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show (from+1), outGroups = [Consensus.group], outMsgType = 2}
                   send nextMsg conn
-                  auxSyncFromTo pipe (from+1) to (chan,conn))
+                  auxSyncFromTo blocksMap pipe (from+1) to (chan,conn))
             )
             (decode $ BSL.fromStrict $ inData msg :: Maybe Block.Block)
-          _ -> auxSyncFromTo pipe from to (chan,conn)
-        _ -> auxSyncFromTo pipe from to (chan,conn)
-  | otherwise = return ()
+          _ -> auxSyncFromTo blocksMap pipe from to (chan,conn)
+        _ -> auxSyncFromTo blocksMap pipe from to (chan,conn)
+  | otherwise = return blocksMap
 
 parseInsertBlock :: Mongo.Pipe -> Block.Block -> Int -> IO BlockParseResult
 parseInsertBlock pipe blck 0 = do
