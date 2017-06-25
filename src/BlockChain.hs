@@ -53,6 +53,9 @@ pop :: Queue a -> (Maybe a,Queue a)
 pop (Queue [] size) = (Nothing, Queue [] size)
 pop (Queue (x:xs) size) = (Just x,Queue xs size)
 
+pushReplaceG :: Queue G.Group -> G.Group -> Queue G.Group
+pushReplaceG q@(Queue l size) g = let l' = filter ((/=) (G.ident g) . G.ident) l in Queue (g:l') size
+
 pushReplace :: Queue User -> User -> Queue User
 pushReplace q@(Queue l size) usr = let l' = filter ((/=) (uname usr) . uname) l in Queue (usr:l') size
 
@@ -101,6 +104,11 @@ getBlocks = do
   (\y -> map (\x -> fromJust $ (fromBSON x :: Maybe Block)) y) `fmap` rresult
 
 --- fetchUser && userLogin aux funcs ---
+update_cache_replace_g found_group cache = atomically $ do
+  _cache <- readTVar cache
+  let new_gc = pushReplaceG (groupsCache _cache) found_group
+  let newCache = _cache { groupsCache = new_gc }
+  writeTVar cache newCache
 update_cache_replace found_user cache = atomically $ do
   _cache <- readTVar cache
   let new_uc = pushReplace (usersCache _cache) found_user
@@ -187,21 +195,33 @@ fetchUser cache pipe usr = do
 fetchGroup :: TVar Cache -> Pipe -> String -> IO (Maybe G.Group)
 fetchGroup cache pipe gr = do 
     (Cache { usersCache = uc , groupsCache = gc , blockBucket = bb}) <- readTVarIO cache
-    maybe (checkDatabase uc gc bb) encodeResp (getGroup gc gr)
+    maybe (checkDatabase uc gc bb) (updateCache pipe cache) (getGroup gc gr)
   where
     checkDatabase uc gc bb = do
       blocks <- runQuery pipe getBlocks
       let dats = concat $ map dat blocks
       let groupReg = L.find (checkRegG gr) dats
       case groupReg of
-        Just (GR (GroupRegister { identifier = gname, description = descrip })) -> do
+        Just (GR (GroupRegister { identifier = gname, description = descrip, users = usrs0 })) -> do
           let usrs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkUserReg gr) dats
           let trans = [] 
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-          let found_group = G.G { G.ident = gname , G.users = usrs, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
+          let found_group = G.G { G.ident = gname , G.users = usrs0++usrs, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
           update_cache_g found_group uc gc bb cache
           encodeResp found_group
         _ -> return Nothing
+    updateCache pipe cache justGroup = do
+      let last_block_idx = read $ G.bstamp justGroup
+      db_last_block <- maybe (error "Database error!") id `fmap` runQuery pipe getLastBlock
+      let db_last_block_idx = fromIntegral $ Block.index db_last_block
+      if last_block_idx == db_last_block_idx then encodeResp justGroup else do
+        blocks <- getBlocksFromTo pipe last_block_idx db_last_block_idx
+        let dats = concat $ map dat blocks
+        let usrs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkUserReg gr) dats
+        let trans = [] 
+        let found_group = justGroup { G.users = usrs++(G.users justGroup), G.transactions = trans++(G.transactions justGroup), G.bstamp = show $ Block.index db_last_block}
+        update_cache_replace_g found_group cache
+        encodeResp found_group
     encodeResp g = return (Just g)
 
 registerGroup :: TVar Cache -> Pipe -> GroupRegister -> IO Bool

@@ -36,12 +36,23 @@ runApiServer pipe cache = do
         get "/users/:username" $ do
            uname <- param "username"
            either 
-               (const $ status notFound404) 
+               (const $ status badRequest400) 
                (\x -> do 
                    res <- liftAndCatchIO $ fetchUser cache pipe x
                    maybe (status notFound404) (json) res
                ) 
                (parseParam uname)
+
+        -- get group by identifier
+        get "/groups/:identifier" $ do
+           ident' <- param "identifier"
+           either 
+               (const $ status badRequest400) 
+               (\x -> do 
+                   res <- liftAndCatchIO $ fetchGroup cache pipe x
+                   maybe (status notFound404) (json) res
+               ) 
+               (parseParam ident')
        
         post "/groupreg" $ do
            greg <- Just `fmap` (jsonData :: ActionM GroupRegister) `rescue` (\_ -> status badRequest400 >> return Nothing)

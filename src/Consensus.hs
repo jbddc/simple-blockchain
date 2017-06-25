@@ -22,6 +22,9 @@ type Bucket = TVar Block.BlockBuilder
 
 data BlockParseResult = HashMismatch | IndexMismatch | DatabaseError | OK
 
+spread_address = Just "alcetipe.dyndns.org"
+spread_port = Just 4803
+
 group :: PrivateGroup
 group = fromJust $ makeGroup "consensus"
 
@@ -85,7 +88,6 @@ name = do
 -- WARNING: IR BUSCAR BLOCOS ATÉ AO MAIS RECENTE
 startConsensus :: (Chan R Message,Connection) -> Mongo.Pipe -> TVar Cache -> IO ()
 startConsensus (chan,conn) pipe cache = do
-  n <- Consensus.name
   join Consensus.group conn
   startReceive conn
   (numMembers,blocksMap) <- getNumMembers Map.empty chan
@@ -121,7 +123,7 @@ consensusHandshake pipe = do
     currentIndex <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
     putStr  "Current Index: " >> print currentIndex
     -- establish connection
-    let config = Conf { address = Nothing , port = Nothing, desiredName = tempName, priority = False, groupMembership = True, authMethods = [] }
+    let config = Conf { address = spread_address , port = spread_port, desiredName = tempName, priority = False, groupMembership = True, authMethods = [] }
     (chan,conn) <- connect config
     join Consensus.group conn
     startReceive conn

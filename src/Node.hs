@@ -19,7 +19,7 @@ nodeStartup = do
   -- launch consensus part of node (it will be responsible for storing new blocks)
   bls <- consensusHandshake pipe
   n <- Consensus.name
-  let config = Conf { address = Just "localhost" , port = Nothing, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
+  let config = Conf { address = Consensus.spread_address , port = Consensus.spread_port, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
   spread_con <- connect config
   maybe 
     (do
