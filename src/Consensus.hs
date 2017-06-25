@@ -44,10 +44,12 @@ listenNetworkBlocks pipe cache (chan,conn) = do
           let mBlock = decode $ BSL.fromStrict $ inData inMsg
           maybe (return ()) (processNewBlock pipe) mBlock
         -- request for block by index
-        2 -> randomFalseTrue >>= (\a -> if not a then return () else do
+        2 -> do
           let blockIndex = read $ B.unpack $ inData inMsg
+          putStr "Received Request for Block: " 
+          putStrLn $ B.unpack $ inData inMsg
           mBlock <- runQuery pipe (getBlockByIndex blockIndex)
-          maybe (return ()) (sendBlock conn) mBlock)
+          maybe (return () >> putStr "Couldn't send block") (\blc -> sendBlock conn blc >> putStrLn "Block Sent.") mBlock
         -- request for current block index
         3 -> do
           response <- runQuery pipe getNrBlocks
@@ -178,6 +180,7 @@ recvIndex blocksMap chan = do
 syncFromTo :: Map.Map Integer Block.Block -> Mongo.Pipe -> Int -> Int -> (Chan R Message,Connection) -> IO (Map.Map Integer Block.Block)
 syncFromTo blocksMap pipe from to (chan,conn) = do
     let firstMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show from, outGroups = [Consensus.group], outMsgType = 2}
+    putStrLn $ "Sending request for block #"++(show from)
     send firstMsg conn
     auxSyncFromTo blocksMap pipe from to (chan,conn)
 
@@ -191,6 +194,7 @@ auxSyncFromTo blocksMap pipe from to (chan,conn)
             maybe
             (do
               let retryMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show from, outGroups = [Consensus.group], outMsgType = 2}
+              putStrLn $ "Sending request for block #"++(show from)
               send retryMsg conn
               auxSyncFromTo blocksMap pipe from to (chan,conn)
             )
@@ -198,12 +202,14 @@ auxSyncFromTo blocksMap pipe from to (chan,conn)
               IndexMismatch -> auxSyncFromTo (Map.insert (Block.index blck) blck blocksMap) pipe from to (chan,conn)
               HashMismatch -> do
                 let retryMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show from, outGroups = [Consensus.group], outMsgType = 2}
+                putStrLn $ "Sending request for block #"++(show from)
                 send retryMsg conn
                 auxSyncFromTo (Map.insert (Block.index blck) blck blocksMap) pipe from to (chan,conn)
               DatabaseError -> error "Database Error!"
               OK -> do
                 if from==to then return blocksMap else do
                   let nextMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show (from+1), outGroups = [Consensus.group], outMsgType = 2}
+                  putStrLn $ "Sending request for block #"++(show $ from+1)
                   send nextMsg conn
                   auxSyncFromTo blocksMap pipe (from+1) to (chan,conn))
             )
