@@ -83,11 +83,9 @@ name = do
   return . mkPrivateName . B.pack . show $ h
 
 -- WARNING: IR BUSCAR BLOCOS ATÉ AO MAIS RECENTE
-startConsensus :: Mongo.Pipe -> TVar Cache -> IO ()
-startConsensus pipe cache = do
+startConsensus :: (Chan R Message,Connection) -> Mongo.Pipe -> TVar Cache -> IO ()
+startConsensus (chan,conn) pipe cache = do
   n <- Consensus.name
-  let config = Conf { address = Just "localhost" , port = Nothing, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
-  (chan,conn) <- connect config
   join Consensus.group conn
   startReceive conn
   (numMembers,blocksMap) <- getNumMembers Map.empty chan

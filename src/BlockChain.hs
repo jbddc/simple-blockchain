@@ -53,6 +53,9 @@ pop :: Queue a -> (Maybe a,Queue a)
 pop (Queue [] size) = (Nothing, Queue [] size)
 pop (Queue (x:xs) size) = (Just x,Queue xs size)
 
+pushReplace :: Queue User -> User -> Queue User
+pushReplace q@(Queue l size) usr = let l' = filter ((/=) (uname usr) . uname) l in Queue (usr:l') size
+
 push :: Queue a -> a -> Queue a
 push (Queue l size) x
   | (length l)+1 > size = Queue (x:(L.init l)) size
@@ -98,6 +101,11 @@ getBlocks = do
   (\y -> map (\x -> fromJust $ (fromBSON x :: Maybe Block)) y) `fmap` rresult
 
 --- fetchUser && userLogin aux funcs ---
+update_cache_replace found_user cache = atomically $ do
+  _cache <- readTVar cache
+  let new_uc = pushReplace (usersCache _cache) found_user
+  let newCache = _cache { usersCache = new_uc }
+  writeTVar cache newCache
 update_cache_g found_group uc gc bb cache = atomically $ do
   let new_gc = push gc found_group
   let newCache = Cache { usersCache = uc, groupsCache = new_gc , blockBucket = bb}
@@ -119,6 +127,14 @@ filterUsersIds _ = Nothing
 filterGroupIds (UGR (UserGroupRegister {groupId = x})) = Just x
 filterGroupIds _ = Nothing
 --- //// ---
+
+getBlocksFromTo :: Pipe -> Int -> Int -> IO [Block]
+getBlocksFromTo pipe from to  
+  | from <= to = do
+    bl <- runQuery pipe (getBlockByIndex from)
+    maybe (error "Database error!") (\b -> (getBlocksFromTo pipe (from+1) to) >>= (return . (:) b)) bl
+  | otherwise = return []
+
 userLogin :: TVar Cache -> Pipe -> String -> String -> IO Bool
 userLogin cache pipe usr p = do 
     (Cache { usersCache = uc , groupsCache = gc, blockBucket = bb }) <- readTVarIO cache
@@ -131,7 +147,7 @@ userLogin cache pipe usr p = do
       case userReg of
         Just (UR (UserRegister { pw = pwd })) -> do
           let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
-          cur_block_nr <- (1-) `fmap` runQuery pipe getNrBlocks
+          cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
           let found_user = User { uname = usr , password = pwd , memberGroups = gs , blockstamp = show cur_block_nr }
           update_cache found_user uc gc bb cache
           encodeResp found_user
@@ -141,7 +157,7 @@ userLogin cache pipe usr p = do
 fetchUser :: TVar Cache -> Pipe -> String -> IO (Maybe UserResponse)
 fetchUser cache pipe usr = do 
     (Cache { usersCache = uc , groupsCache = gc , blockBucket = bb}) <- readTVarIO cache
-    maybe (checkDatabase uc gc bb) encodeResp (getUser uc usr)
+    maybe (checkDatabase uc gc bb) (updateCache pipe cache) (getUser uc usr)
   where
     checkDatabase uc gc bb = do
       blocks <- runQuery pipe getBlocks
@@ -150,11 +166,22 @@ fetchUser cache pipe usr = do
       case userReg of
         Just (UR (UserRegister { pw = pwd })) -> do
           let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
-          cur_block_nr <- (1-) `fmap` runQuery pipe getNrBlocks
+          cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
           let found_user = User { uname = usr , password = pwd , memberGroups = gs , blockstamp = show cur_block_nr }
           update_cache found_user uc gc bb cache
           encodeResp found_user
         _ -> return Nothing
+    updateCache pipe cache justUsr = do
+      let last_block_idx = read $ blockstamp justUsr
+      db_last_block <- maybe (error "Database error!") id `fmap` runQuery pipe getLastBlock
+      let db_last_block_idx = fromIntegral $ Block.index db_last_block
+      if last_block_idx == db_last_block_idx then encodeResp justUsr else do
+        blocks <- getBlocksFromTo pipe last_block_idx db_last_block_idx
+        let dats = concat $ map dat blocks
+        let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
+        let found_user = justUsr { memberGroups = (memberGroups justUsr)++gs , blockstamp = show $ Block.index db_last_block}
+        update_cache_replace found_user cache
+        encodeResp found_user
     encodeResp (User { uname = u , memberGroups = g }) = return (Just $ UserResponse { username = u , groups = g })
 
 fetchGroup :: TVar Cache -> Pipe -> String -> IO (Maybe G.Group)
@@ -170,7 +197,7 @@ fetchGroup cache pipe gr = do
         Just (GR (GroupRegister { identifier = gname, description = descrip })) -> do
           let usrs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkUserReg gr) dats
           let trans = [] 
-          cur_block_nr <- (1-) `fmap` runQuery pipe getNrBlocks
+          cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
           let found_group = G.G { G.ident = gname , G.users = usrs, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
           update_cache_g found_group uc gc bb cache
           encodeResp found_group
