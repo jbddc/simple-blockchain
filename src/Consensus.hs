@@ -107,14 +107,25 @@ startConsensus (chan,conn) pipe cache = do
       let indReqMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack "", outGroups = [Consensus.group], outMsgType = 3}
       send indReqMsg conn
       (index,blocksMap') <- recvIndex blocksMap chan
-      blocksMap'' <- syncFromTo blocksMap' pipe (currentIndex+1) index (chan,conn)
-      mapM_ (\b -> parseInsertBlock pipe b (fromIntegral $ Block.index b)) $ elems blocksMap''
-      _cache <- readTVarIO cache
-      let old_bb = blockBucket _cache
-      last_block <- runQuery pipe getLastBlock
-      maybe (return ()) (\last_b -> atomically $ writeTVar cache (_cache { blockBucket = old_bb { Block.prevBlock = last_b } })) last_block
-      listenNetworkBlocks pipe cache (chan,conn)
-      disconnect conn
+      case index > currentIndex of
+        True -> do
+          blocksMap'' <- syncFromTo blocksMap' pipe (currentIndex+1) index (chan,conn) 
+          mapM_ (\b -> parseInsertBlock pipe b (fromIntegral $ Block.index b)) $ elems blocksMap''
+          _cache <- readTVarIO cache
+          let old_bb = blockBucket _cache
+          last_block <- runQuery pipe getLastBlock
+          maybe (return ()) (\last_b -> atomically $ writeTVar cache (_cache { blockBucket = old_bb { Block.prevBlock = last_b } })) last_block
+          listenNetworkBlocks pipe cache (chan,conn)
+          disconnect conn
+        False -> do
+          let blocksMap'' = blocksMap
+          mapM_ (\b -> parseInsertBlock pipe b (fromIntegral $ Block.index b)) $ elems blocksMap''
+          _cache <- readTVarIO cache
+          let old_bb = blockBucket _cache
+          last_block <- runQuery pipe getLastBlock
+          maybe (return ()) (\last_b -> atomically $ writeTVar cache (_cache { blockBucket = old_bb { Block.prevBlock = last_b } })) last_block
+          listenNetworkBlocks pipe cache (chan,conn)
+          disconnect conn
 
 consensusHandshake :: Mongo.Pipe -> IO (Maybe Block.Block)
 consensusHandshake pipe = do
@@ -144,10 +155,14 @@ consensusHandshake pipe = do
         (index,_) <- recvIndex Map.empty chan
         putStr "Index: " >> print index
         -- ir buscar blocos entre aquele que eu tenho na BD e o bloco mais recente da rede
-        syncFromTo Map.empty pipe (currentIndex+1) index (chan,conn)
-        disconnect conn
-        -- retornar ultimo bloco actual para dar startup à cache
-        runQuery pipe getLastBlock
+        case index > currentIndex of
+          True -> do
+            syncFromTo Map.empty pipe (currentIndex+1) index (chan,conn)
+            disconnect conn
+            runQuery pipe getLastBlock
+          _ -> do 
+            disconnect conn
+            runQuery pipe getLastBlock
 
 getNumMembers :: Map.Map Integer Block.Block -> Chan R Message -> IO (Int,Map.Map Integer Block.Block)
 getNumMembers blocksMap chan = do
