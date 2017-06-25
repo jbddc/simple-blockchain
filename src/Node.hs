@@ -15,18 +15,18 @@ nodeStartup = do
   -- get database address
   pipe <- dbConnect
   -- launch consensus part of node (it will be responsible for storing new blocks)
-  bls <- consensusHandshake
+  bls <- consensusHandshake pipe
 
   maybe 
     (do
       _ <- runQuery pipe (insertBlock genesis) 
       cache <- newTVarIO $ mkCache 1000 1 genesis 
       servingVein pipe cache
-      consensusVein pipe cache)
-    (do
-      cache <- newTVarIO $ mkCache 1000 1 (last bls) 
+      consensusVein pipe)
+    (\justBls -> do
+      cache <- newTVarIO $ mkCache 1000 1 justBls 
       servingVein pipe cache
-      consensusVein pipe cache)
+      consensusVein pipe) 
     bls
 
 

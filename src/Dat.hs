@@ -83,7 +83,6 @@ addRecord t = (:) t
 numTransactions :: Dat -> Int
 numTransactions = length 
 
-
 registerUser :: String -> String -> Record
 registerUser username password = UR $ UserRegister { name = username , pw = password }
 

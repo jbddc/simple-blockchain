@@ -9,6 +9,7 @@ module Block (
     currentDat,
     size,
     blockHash,
+    prevHash,
     dat,
     index,
     addRec,
