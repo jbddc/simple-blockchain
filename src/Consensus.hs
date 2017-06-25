@@ -51,7 +51,7 @@ listenNetworkBlocks pipe cache (chan,conn) = do
         -- request for current block index
         3 -> do
           response <- runQuery pipe getNrBlocks
-          let respMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show response, outGroups = [Consensus.group], outMsgType = 4}
+          let respMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show (response -1), outGroups = [Consensus.group], outMsgType = 4}
           send respMsg conn
         typ -> putStrLn $ "TODO Msg Type: "++(show typ)
     Just (Membership memMsg) -> putStrLn $ show $ numMembers memMsg
@@ -140,7 +140,7 @@ consensusHandshake pipe = do
         let indReqMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack "", outGroups = [Consensus.group], outMsgType = 3}
         send indReqMsg conn
         (index,_) <- recvIndex Map.empty chan
-        putStrLn "Index: " >> print index
+        putStr "Index: " >> print index
         -- ir buscar blocos entre aquele que eu tenho na BD e o bloco mais recente da rede
         syncFromTo Map.empty pipe (currentIndex+1) index (chan,conn)
         disconnect conn
