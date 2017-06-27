@@ -129,10 +129,12 @@ checkReg _ _ = False
 checkUserReg gr (UGR (UserGroupRegister {groupId = x})) = if x==gr then True else False
 checkUserReg _ _ = False
 checkGroupReg usr (UGR (UserGroupRegister {userId = x})) = if x==usr then True else False
+checkGroupReg usr (GR (GroupRegister { users = usrs })) = if usr `elem` usrs then True else False
 checkGroupReg _ _ = False
 filterUsersIds (UGR (UserGroupRegister {userId = x})) = Just x
 filterUsersIds _ = Nothing
 filterGroupIds (UGR (UserGroupRegister {groupId = x})) = Just x
+filterGroupIds (GR (GroupRegister {identifier = x})) = Just x
 filterGroupIds _ = Nothing
 --- //// ---
 
