@@ -6,6 +6,9 @@ import BlockChain
 import Block
 import Spread.Client
 import Consensus
+import GHC.Conc
+import System.IO
+import System.Exit
 import Control.Concurrent
 import Control.Concurrent.STM.TVar
 
@@ -45,11 +48,15 @@ servingVein dbPipe cache = do
 
 listenExit spread_con tid1 tid2 = do
   str <- getLine
-  if str == "quit" || str == "exit" || str == "shutdown" then do
+  spread_alive <- alive tid2
+  if str == "quit" || str == "exit" || str == "shutdown" || (not spread_alive) then do
     killThread tid1
     killThread tid2
     disconnect $ snd spread_con
   else listenExit spread_con tid1 tid2
+
+alive :: ThreadId -> IO Bool
+alive = fmap (== ThreadRunning) . threadStatus
 
 debugVein = undefined
   -- logger with remote access? (http page maybe)

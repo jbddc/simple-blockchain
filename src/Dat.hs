@@ -21,11 +21,19 @@ instance FromJSON Record
 instance ToBSON Record
 instance FromBSON Record
 
+data ValueByUser = ValueByUser String Double
+  deriving (Generic,Show,Eq)
+
+instance ToJSON ValueByUser 
+instance FromJSON ValueByUser
+
+instance ToBSON ValueByUser
+instance FromBSON ValueByUser
+
 data Transaction = Transaction {
     fromUser :: !String ,
-    toUser   :: !String ,
     group    :: !String ,
-    value    :: !Double ,
+    value    :: ![ValueByUser],
     message  :: !String ,
     tstamp   :: !String ,
     chksum   :: !String
@@ -87,9 +95,9 @@ numTransactions = length
 registerUser :: String -> String -> Record
 registerUser username password = UR $ UserRegister { name = username , pw = password }
 
-createTransaction :: String -> String -> String -> Double -> String -> String -> Record
-createTransaction fAddr tAddr g val msg ts=
+createTransaction :: String -> String -> [ValueByUser] -> String -> String -> Record
+createTransaction fAddr g val msg ts=
     let
-      csum = ((hash . C8.pack) . concat) [fAddr,tAddr,show val,msg,ts] :: Hash
+      csum = ((hash . C8.pack) . concat) [fAddr,show val,msg,ts] :: Hash
     in
-      T $ Transaction { fromUser = fAddr, toUser = tAddr, group = g, value = val, message = msg, tstamp = ts, chksum = show csum}
+      T $ Transaction { fromUser = fAddr, group = g, value = val, message = msg, tstamp = ts, chksum = show csum}

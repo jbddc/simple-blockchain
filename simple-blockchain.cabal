@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     BlockChain Block Dat Serving
+  exposed-modules:     BlockChain Block Dat Serving Consensus Node
   build-depends:       base >= 3 && < 5
                      , cryptonite >= 0.21
                      , bytestring >= 0.10

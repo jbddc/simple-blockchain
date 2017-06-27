@@ -5,6 +5,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Control.Concurrent as Concurrent
 import Time.System
 import System.Random
+import System.Exit
 import qualified Control.Monad as Monad
 import Crypto.Hash
 import Control.Concurrent.STM
@@ -22,7 +23,8 @@ type Bucket = TVar Block.BlockBuilder
 
 data BlockParseResult = HashMismatch | IndexMismatch | DatabaseError | OK
 
-spread_address = Just "alcetipe.dyndns.org"
+--spread_address = Just "alcetipe.dyndns.org"
+spread_address = Just "localhost"
 spread_port = Just 4803
 
 group :: PrivateGroup
@@ -35,6 +37,10 @@ sendBlock conn block = do
 
 listenNetworkBlocks :: Mongo.Pipe -> TVar Cache -> (Chan R Message, Connection) -> IO ()
 listenNetworkBlocks pipe cache (chan,conn) = do
+  isC <- startReceive conn
+  case isC of
+     True -> stopReceive conn >>= const (putStrLn "Connection to Spread daemon lost! Please quit this node and restart connection...")
+     False -> return ()
   msg <- readChan chan
   case msg of
     Just (Regular inMsg) -> do
@@ -57,7 +63,7 @@ listenNetworkBlocks pipe cache (chan,conn) = do
           send respMsg conn
         typ -> putStrLn $ "TODO Msg Type: "++(show typ)
     Just (Membership memMsg) -> putStrLn $ show $ numMembers memMsg
-    Nothing -> putStrLn "Bad message..."
+    Nothing -> putStrLn "Lost connection to Spread Daemon, press [enter] to acknowledge this message and quit..." >> disconnect conn >>= const exitFailure
     _ -> putStrLn "TODO"  
   listenNetworkBlocks pipe cache (chan,conn)
 
