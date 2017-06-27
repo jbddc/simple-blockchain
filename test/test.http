@@ -1,0 +1,70 @@
+POST http://localhost:9000/newuser
+Content-Type: application/json
+Authorization: Basic none none
+
+{ 
+    "name":"tiago", 
+    "pw":"1234"
+}
+
+###
+
+GET http://localhost:9000/users/tiago
+Authorization: Basic tiago 1234
+
+###
+
+GET http://localhost:9000/users/tiago/0
+Authorization: Basic tiago 1234
+
+###
+POST http://localhost:9000/groupreg
+Content-Type: application/json
+Authorization: Basic tiago 1234
+
+{
+    "identifier":"group1",
+    "description":"Apartment",
+    "users": ["tiago"]
+}
+
+###
+GET http://localhost:9000/groups/group1
+Authorization: Basic tiago 1234
+
+###
+GET http://localhost:9000/groups/group1/0
+Authorization: Basic tiago 1234
+
+###
+
+POST http://localhost:9000/newuser
+Content-Type: application/json
+Authorization: Basic none none
+
+{ 
+    "name":"rui", 
+    "pw":"1234"
+}
+
+###
+
+POST http://localhost:9000/newuser
+Content-Type: application/json
+Authorization: Basic none none
+
+{ 
+    "name":"gaga", 
+    "pw":"1234"
+}
+
+###
+
+POST http://localhost:9000/addfriend
+Content-Type: application/json
+Authorization: Basic rui 1234
+
+{
+    "user_id":"rui",
+    "friend_id":"gaga"
+}

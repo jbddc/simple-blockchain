@@ -16,7 +16,10 @@ import Control.Monad
 import System.IO.Unsafe
 import System.IO
 import qualified Data.Text.Lazy as Text
+import qualified Data.Text.Lazy.Encoding as TEnc
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Base64 as BSE (decode)
 --import Web.Scotty.TLS
 
 runApiServer pipe cache = do
@@ -43,6 +46,14 @@ runApiServer pipe cache = do
                ) 
                (parseParam uname)
 
+        get "/users/:username/:block" $ do
+            uname <- param "username"
+            block <- param "block"
+            either 
+                (const $ status badRequest400)
+                (\x -> either (const $ status badRequest400) (\y -> liftAndCatchIO $ putStrLn $ "Uname: "++x++" Block: "++y) (parseParam block))
+                (parseParam uname)
+
         -- get group by identifier
         get "/groups/:identifier" $ do
            ident' <- param "identifier"
@@ -53,11 +64,34 @@ runApiServer pipe cache = do
                    maybe (status notFound404) (json) res
                ) 
                (parseParam ident')
+
+        get "/groups/:identifier/:block" $ do
+            ident' <- param "identifier"
+            block <- param "block"
+            either 
+                (const $ status badRequest400)
+                (\x -> either (const $ status badRequest400) (\y -> liftAndCatchIO $ putStrLn $ "Uname: "++x++" Block: "++y) (parseParam block))
+                (parseParam ident')
        
         post "/groupreg" $ do
            greg <- Just `fmap` (jsonData :: ActionM GroupRegister) `rescue` (\_ -> status badRequest400 >> return Nothing)
            case greg of
                Just x -> (liftAndCatchIO $ registerGroup cache pipe x) >> status ok200
+               Nothing -> return ()
+
+        post "/addfriend" $ do
+           af <- Just `fmap` (jsonData :: ActionM AddFriend) `rescue` (\_ -> status badRequest400 >> return Nothing)
+           case af of
+               Just x -> do
+                   h <- header "Authorization" 
+                   let auth_header = maybe (Left "") (BSE.decode . B.toStrict . TEnc.encodeUtf8 . Text.drop 1 . Text.dropWhile (/=' ')) h
+                   either 
+                     (const (status badRequest400)) 
+                     (\str -> do
+                         let uname = takeWhile (/=':') $ BS.unpack str
+                         if uname/=(user_id x) then (status badRequest400) else (liftAndCatchIO $ addFriend cache pipe x) >>= (\res -> if res then status ok200 else status badRequest400)
+                     ) 
+                     auth_header
                Nothing -> return ()
 
         -- get block by index
@@ -75,4 +109,3 @@ runApiServer pipe cache = do
         get "/blockchain/byHash/:blockHash" $ do
             blockHash <- param "blockHash"
             either (\_ -> status internalServerError500) (\x -> do {res <- liftAndCatchIO $ runQuery pipe $ getBlockByHash x;maybe (status notFound404) (\x -> json x) res;}) (parseParam blockHash)
-        

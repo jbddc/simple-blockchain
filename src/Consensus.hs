@@ -23,8 +23,8 @@ type Bucket = TVar Block.BlockBuilder
 
 data BlockParseResult = HashMismatch | IndexMismatch | DatabaseError | OK
 
---spread_address = Just "alcetipe.dyndns.org"
-spread_address = Just "localhost"
+spread_address = Just "alcetipe.dyndns.org"
+--spread_address = Just "localhost"
 spread_port = Just 4803
 
 group :: PrivateGroup
@@ -138,7 +138,7 @@ consensusHandshake pipe = do
     -- criar nome temporario
     tempName <- Consensus.name
     putStr  "Name created: " >> print tempName
-    -- obter o bloco mais recente (WARNING: posso nao ter blocos)
+    -- obter o bloco mais recente 
     currentIndex <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
     putStr  "Current Index: " >> print currentIndex
     -- establish connection

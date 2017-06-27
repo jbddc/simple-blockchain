@@ -12,7 +12,7 @@ import qualified Data.ByteString.Char8 as C8
 type Hash = Digest SHA256
 type Dat = [Record]
 
-data Record = T Transaction | GR GroupRegister | UR UserRegister | UGR UserGroupRegister
+data Record = T Transaction | GR GroupRegister | UR UserRegister | AF AddFriend
  deriving (Generic,Show,Eq)
 
 instance ToJSON Record 
@@ -71,17 +71,17 @@ instance FromJSON UserRegister
 instance ToBSON UserRegister
 instance FromBSON UserRegister
 
-data UserGroupRegister = UserGroupRegister {
-    groupId :: !String ,
-    userId  :: !String
-}
+data AddFriend = AddFriend {
+     user_id :: !String ,
+     friend_id :: !String 
+    }
  deriving (Generic,Show,Eq)
 
-instance ToJSON UserGroupRegister 
-instance FromJSON UserGroupRegister
+instance ToJSON AddFriend 
+instance FromJSON AddFriend
 
-instance ToBSON UserGroupRegister
-instance FromBSON UserGroupRegister
+instance ToBSON AddFriend
+instance FromBSON AddFriend
 
 newDat :: Dat
 newDat = []

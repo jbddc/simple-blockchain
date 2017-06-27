@@ -12,6 +12,7 @@ module BlockChain ( runQuery
     , mkCache
     , fetchUser
     , fetchGroup
+    , addFriend
     , userLogin
     , registerGroup
     , regUser
@@ -126,14 +127,12 @@ checkRegG gr (GR (GroupRegister {identifier = x})) = if x==gr then True else Fal
 checkRegG _ _ = False
 checkReg usr (UR (UserRegister {name = x})) = if x==usr then True else False
 checkReg _ _ = False
-checkUserReg gr (UGR (UserGroupRegister {groupId = x})) = if x==gr then True else False
-checkUserReg _ _ = False
-checkGroupReg usr (UGR (UserGroupRegister {userId = x})) = if x==usr then True else False
 checkGroupReg usr (GR (GroupRegister { users = usrs })) = if usr `elem` usrs then True else False
 checkGroupReg _ _ = False
-filterUsersIds (UGR (UserGroupRegister {userId = x})) = Just x
-filterUsersIds _ = Nothing
-filterGroupIds (UGR (UserGroupRegister {groupId = x})) = Just x
+checkAddFriend usr (AF (AddFriend {user_id = uid , friend_id = fid })) = if usr==uid || usr==fid then True else False
+checkAddFriend _ _ = False
+filterAF usr (AF af) = if usr == (friend_id af) then (user_id af) else (friend_id af)
+filterAF _ _ = "" 
 filterGroupIds (GR (GroupRegister {identifier = x})) = Just x
 filterGroupIds _ = Nothing
 --- //// ---
@@ -158,7 +157,9 @@ userLogin cache pipe usr p = do
         Just (UR (UserRegister { pw = pwd })) -> do
           let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-          let found_user = User { uname = usr , password = pwd , memberGroups = gs , blockstamp = show cur_block_nr }
+          -- WARNING: IMPLEMENT FRIEND LIST
+          let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
+          let found_user = User { uname = usr , password = pwd , memberGroups = gs , friendsList = fl , blockstamp = show cur_block_nr }
           update_cache found_user uc gc bb cache
           encodeResp found_user
         _ -> return False
@@ -177,7 +178,9 @@ fetchUser cache pipe usr = do
         Just (UR (UserRegister { pw = pwd })) -> do
           let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-          let found_user = User { uname = usr , password = pwd , memberGroups = gs , blockstamp = show cur_block_nr }
+          -- WARNING: IMPLEMENT FRIEND LIST
+          let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
+          let found_user = User { uname = usr , password = pwd , memberGroups = gs , friendsList = fl , blockstamp = show cur_block_nr }
           update_cache found_user uc gc bb cache
           encodeResp found_user
         _ -> return Nothing
@@ -189,10 +192,33 @@ fetchUser cache pipe usr = do
         blocks <- getBlocksFromTo pipe last_block_idx db_last_block_idx
         let dats = concat $ map dat blocks
         let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
-        let found_user = justUsr { memberGroups = (memberGroups justUsr)++gs , blockstamp = show $ Block.index db_last_block}
+        let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
+        let found_user = justUsr { memberGroups = (memberGroups justUsr)++gs , friendsList = (friendsList justUsr)++fl , blockstamp = show $ Block.index db_last_block}
         update_cache_replace found_user cache
         encodeResp found_user
-    encodeResp (User { uname = u , memberGroups = g }) = return (Just $ UserResponse { username = u , groups = g })
+    encodeResp (User { uname = u , memberGroups = g , blockstamp = stamp , friendsList = fl }) = return (Just $ UserResponse { username = u , groups = g , bstamp = stamp , flist = fl })
+
+
+addFriend :: TVar Cache -> Pipe -> AddFriend -> IO Bool
+addFriend cache pipe af = do
+  usr <- fetchUser cache pipe (user_id af)
+  case usr of
+    Nothing -> return False
+    Just (UserResponse { flist = fl }) -> do
+      if (friend_id af) `elem` fl then return False else do
+        friend <- fetchUser cache pipe (friend_id af)
+        if isNothing friend then return False else do
+          _cache <- readTVarIO cache
+          either
+            (\ bb -> atomically $ writeTVar cache (_cache { blockBucket = bb }))
+            (\newBlock -> do
+               _ <- runQuery pipe (insertBlock newBlock)
+               let new_bb = newBB newBlock (size (blockBucket _cache))
+               atomically $ writeTVar cache (_cache { blockBucket = new_bb }) 
+            ) 
+            (addRec (AF af) (blockBucket _cache))
+          return True
+
 
 fetchGroup :: TVar Cache -> Pipe -> String -> IO (Maybe G.Group)
 fetchGroup cache pipe gr = do 
@@ -205,10 +231,9 @@ fetchGroup cache pipe gr = do
       let groupReg = L.find (checkRegG gr) dats
       case groupReg of
         Just (GR (GroupRegister { identifier = gname, description = descrip, users = usrs0 })) -> do
-          let usrs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkUserReg gr) dats
           let trans = [] 
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-          let found_group = G.G { G.ident = gname , G.users = usrs0++usrs, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
+          let found_group = G.G { G.ident = gname , G.users = usrs0, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
           update_cache_g found_group uc gc bb cache
           encodeResp found_group
         _ -> return Nothing
@@ -219,9 +244,8 @@ fetchGroup cache pipe gr = do
       if last_block_idx == db_last_block_idx then encodeResp justGroup else do
         blocks <- getBlocksFromTo pipe last_block_idx db_last_block_idx
         let dats = concat $ map dat blocks
-        let usrs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkUserReg gr) dats
         let trans = [] 
-        let found_group = justGroup { G.users = usrs++(G.users justGroup), G.transactions = trans++(G.transactions justGroup), G.bstamp = show $ Block.index db_last_block}
+        let found_group = justGroup { G.users = (G.users justGroup), G.transactions = trans++(G.transactions justGroup), G.bstamp = show $ Block.index db_last_block}
         update_cache_replace_g found_group cache
         encodeResp found_group
     encodeResp g = return (Just g)
