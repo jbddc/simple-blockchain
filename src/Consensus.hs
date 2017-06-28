@@ -165,7 +165,6 @@ consensusHandshake pipe addr (chan,conn) = do
     putStr  "Number of Nodes in Network: " >> print numMembers
     if numMembers <= 1 
       then do
-        disconnect conn
         putStrLn "Leaving..."
         -- retornar ultimo bloco actual para dar startup à cache
         runQuery pipe getLastBlock

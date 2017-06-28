@@ -140,6 +140,8 @@ update_cache found_user@(User {}) cache = atomically $ do
   let new_uc = push (usersCache _cache) found_user
   let newCache = _cache { usersCache = new_uc }
   writeTVar cache newCache
+checkTrans g (T (Transaction { Dat.group = _g , Dat.chksum = ck })) = if g==_g then ck else ""
+checkTrans _ _ = ""
 checkRegG gr (GR (GroupRegister {identifier = x})) = if x==gr then True else False
 checkRegG _ _ = False
 checkReg usr (UR (UserRegister {name = x})) = if x==usr then True else False
@@ -219,7 +221,7 @@ fetchGroup cache pipe gr = do
       let groupReg = L.find (checkRegG gr) dats
       case groupReg of
         Just (GR (GroupRegister { gname = g_name , identifier = ide, description = descrip, users = usrs0 })) -> do
-          let trans = [] 
+          let trans =  filter (/="") $ map (checkTrans ide) dats 
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
           let found_group = G.G { G.ident = ide , G.name = g_name , G.users = usrs0, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
           update_cache_g found_group cache
@@ -232,14 +234,13 @@ fetchGroup cache pipe gr = do
       if last_block_idx >= db_last_block_idx then encodeResp justGroup else do
         blocks <- runQuery pipe (getBlocksFrom (fromIntegral (last_block_idx+1)))
         let dats = concat $ map dat blocks
-        let trans = [] 
+        let trans =  filter (/="") $ map (checkTrans (G.ident justGroup)) dats 
         let found_group = justGroup { G.users = (G.users justGroup), G.transactions = trans++(G.transactions justGroup), G.bstamp = show $ Block.index db_last_block}
         update_cache_replace_g found_group cache
         encodeResp found_group
     encodeResp g = return (Just g)
 
 -- POST
-
 addFriend :: TVar Cache -> Pipe -> AddFriend -> IO Bool
 addFriend cache pipe af = do
   usr <- fetchUser cache pipe (user_id af)

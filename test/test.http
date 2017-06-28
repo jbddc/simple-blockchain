@@ -9,7 +9,7 @@ Authorization: Basic none none
 
 ###
 
-GET http://localhost:9000/users/bernardo
+GET http://localhost:9000/users/rui
 Authorization: Basic bernardo 1234
 
 ###
@@ -30,7 +30,7 @@ Authorization: Basic bernardo 1234
 }
 
 ###
-GET http://localhost:9000/groups/group11498685377s463
+GET http://localhost:9000/groups/group11498686051s448
 Authorization: Basic bernardo 1234
 
 ###
