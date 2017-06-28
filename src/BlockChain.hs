@@ -18,6 +18,7 @@ module BlockChain ( runQuery
     , addFriend
     , userLogin
     , registerGroup
+    , regTransaction
     , regUser
 ) where
 
@@ -297,6 +298,29 @@ regUser cache pipe ureg = do
         )
         (addRec (UR ureg) (blockBucket _cache))
       return True
+
+regTransaction :: TVar Cache -> Pipe -> TransactionReg -> IO Bool
+regTransaction cache pipe tran = do
+  _cache <- readTVarIO cache
+  _usr <- fetchUser cache pipe (usr tran)
+  _gr <- fetchGroup cache pipe (grp tran)
+  case _usr of
+    Nothing -> return False
+    Just __usr -> case _gr of
+      Nothing -> return False
+      Just gr -> do 
+        either 
+          (\ bb -> atomically $ writeTVar cache (_cache { blockBucket = bb}) ) 
+          (\newBlock -> do
+             sendBlock (spread_con _cache) newBlock
+             let new_bb = newBB newBlock (size (blockBucket _cache))
+             atomically $ do
+               _c <- readTVar cache
+               let _atb = attempted_blocks _c
+               writeTVar cache (_c { blockBucket = new_bb, attempted_blocks = newBlock:_atb }) 
+          ) 
+          (addRec (createTransaction (usr tran) (grp tran) (vals tran) (msg tran) (ts tran)) (blockBucket _cache))
+        return True
 
 sendBlock :: Spread.Connection -> Block.Block -> IO ()
 sendBlock conn block = do

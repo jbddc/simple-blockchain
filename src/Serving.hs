@@ -12,6 +12,7 @@ import Network.Wai.Middleware.HttpAuth (basicAuth')
 import Network.Wai.Internal (pathInfo)
 import Network.HTTP.Types.Status (ok200, accepted202, badRequest400, notFound404, conflict409, internalServerError500)
 import BlockChain
+import User
 import Control.Monad
 import System.Random
 import Time.System
@@ -98,6 +99,12 @@ runApiServer pipe cache = do
                      ) 
                      auth_header
                Nothing -> return ()
+
+        post "/newtransaction" $ do
+           af <- Just `fmap` (jsonData :: ActionM TransactionReg) `rescue` (\_ -> status badRequest400 >> return Nothing)
+           case af of
+               Just x -> (liftAndCatchIO $ regTransaction cache pipe x) >>= (\res -> if res then status ok200 else status badRequest400)
+               Nothing -> status badRequest400
 
         -- get block by index
         get "/blockchain/byIndex/:blockIndex" $ do

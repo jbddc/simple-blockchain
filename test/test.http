@@ -3,7 +3,7 @@ Content-Type: application/json
 Authorization: Basic none none
 
 { 
-    "name":"ricardo", 
+    "name":"bernardo", 
     "pw":"1234"
 }
 
@@ -20,18 +20,18 @@ Authorization: Basic tiago 1234
 ###
 POST http://localhost:9000/groupreg
 Content-Type: application/json
-Authorization: Basic tiago 1234
+Authorization: Basic bernardo 1234
 
 {
     "identifier": "",
     "gname":"group1",
     "description":"Apartment",
-    "users": ["tiago"]
+    "users": ["bernardo"]
 }
 
 ###
-GET http://localhost:9000/groups/group11498664365s485
-Authorization: Basic tiago 1234
+GET http://localhost:9000/groups/group11498685377s463
+Authorization: Basic bernardo 1234
 
 ###
 GET http://localhost:9000/groups/group1/0
@@ -68,4 +68,17 @@ Authorization: Basic rui 1234
 {
     "user_id":"rui",
     "friend_id":"gaga"
+}
+
+###
+POST http://localhost:9000/newtransaction
+Content-Type: application/json 
+Authorization: Basic bernardo 1234
+
+{
+    "usr":"bernardo",
+    "grp":"group11498686051s448",
+    "vals":[["bernardo","10"]],
+    "msg":"transaction example",
+    "ts":"1234s"
 }

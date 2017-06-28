@@ -21,7 +21,7 @@ instance FromJSON Record
 instance ToBSON Record
 instance FromBSON Record
 
-data ValueByUser = ValueByUser String Double
+data ValueByUser = ValueByUser String String
   deriving (Generic,Show,Eq)
 
 instance ToJSON ValueByUser 
@@ -45,6 +45,21 @@ instance FromJSON Transaction
 
 instance ToBSON Transaction
 instance FromBSON Transaction
+
+data TransactionReg = TransactionReg {
+  usr :: !String,
+  grp :: !String,
+  vals :: ![ValueByUser],
+  msg :: !String,
+  ts  :: !String
+}
+  deriving (Generic,Show,Eq)
+
+instance ToJSON TransactionReg
+instance FromJSON TransactionReg
+
+instance ToBSON TransactionReg
+instance FromBSON TransactionReg
 
 data GroupRegister = GroupRegister {
      users       :: ![String],

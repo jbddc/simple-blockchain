@@ -23,8 +23,6 @@ type Bucket = TVar Block.BlockBuilder
 
 data BlockParseResult = HashMismatch | IndexMismatch | DatabaseError | OK
 
-spread_address = Just "alcetipe.dyndns.org"
---spread_address = Just "localhost"
 spread_port = Just 4803
 
 group :: PrivateGroup
@@ -55,14 +53,15 @@ listenNetworkBlocks pipe cache (chan,conn) = do
           putStr "Received Request for Block: " 
           putStrLn $ B.unpack $ inData inMsg
           mBlock <- runQuery pipe (getBlockByIndex blockIndex)
-          maybe (return () >> putStr "Couldn't send block") (\blc -> sendBlock conn blc >> putStrLn "Block Sent.") mBlock
+          maybe (return () >> putStr "Couldn't send block...") (\blc -> sendBlock conn blc >> putStrLn "Block Sent.") mBlock
         -- request for current block index
         3 -> do
           response <- runQuery pipe getNrBlocks
           let respMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack $ show (response -1), outGroups = [Consensus.group], outMsgType = 4}
           send respMsg conn
+        4 -> return ()
         typ -> putStrLn $ "TODO Msg Type: "++(show typ)
-    Just (Membership memMsg) -> putStrLn $ show $ numMembers memMsg
+    Just (Membership memMsg) -> putStrLn $ "Node joined/left network, now "++(show $ numMembers memMsg)++" nodes online!"
     Nothing -> putStrLn "Lost connection to Spread Daemon, press [enter] to acknowledge this message and quit..." >> disconnect conn >>= const exitFailure
     a -> putStrLn "Unknown Type Message Recieved: " >> print a  
   listenNetworkBlocks pipe cache (chan,conn)
@@ -157,21 +156,20 @@ startConsensus (chan,conn) pipe cache = do
           listenNetworkBlocks pipe cache (chan,conn)
           disconnect conn
 
-consensusHandshake :: Mongo.Pipe -> IO (Maybe Block.Block)
-consensusHandshake pipe = do
+consensusHandshake :: Mongo.Pipe -> Maybe String -> IO (Maybe Block.Block)
+consensusHandshake pipe addr = do
     -- criar nome temporario
     tempName <- Consensus.name
-    putStr  "Name created: " >> print tempName
     -- obter o bloco mais recente 
     currentIndex <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-    putStr  "Current Index: " >> print currentIndex
+    putStr  "Most recent network block: Index #" >> print currentIndex
     -- establish connection
-    let config = Conf { address = spread_address , port = spread_port, desiredName = tempName, priority = False, groupMembership = True, authMethods = [] }
+    let config = Conf { address = addr , port = spread_port, desiredName = tempName, priority = False, groupMembership = True, authMethods = [] }
     (chan,conn) <- connect config
     join Consensus.group conn
     startReceive conn
     (numMembers,_) <- getNumMembers Map.empty chan 
-    putStr  "numMembers: " >> print numMembers
+    putStr  "Number of Nodes in Network: " >> print numMembers
     if numMembers <= 1 
       then do
         disconnect conn
@@ -183,15 +181,16 @@ consensusHandshake pipe = do
         let indReqMsg = Outgoing {outOrdering = Fifo, outDiscard = True, outData = B.pack "", outGroups = [Consensus.group], outMsgType = 3}
         send indReqMsg conn
         (index,_) <- recvIndex Map.empty chan
-        putStr "Index: " >> print index
         -- ir buscar blocos entre aquele que eu tenho na BD e o bloco mais recente da rede
         case index > currentIndex of
           True -> do
             syncFromTo Map.empty pipe (currentIndex+1) index (chan,conn)
             disconnect conn
+            putStrLn "Sync done!"
             runQuery pipe getLastBlock
           _ -> do 
             disconnect conn
+            putStrLn "Sync done!"
             runQuery pipe getLastBlock
 
 getNumMembers :: Map.Map Integer Block.Block -> Chan R Message -> IO (Int,Map.Map Integer Block.Block)

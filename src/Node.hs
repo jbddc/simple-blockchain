@@ -17,13 +17,16 @@ dbConnect = Mongo.connect (Mongo.host "127.0.0.1")
 
 finishDBconn = Mongo.close
 
-nodeStartup = do
+remote_address = Just "alcetipe.dyndns.org"
+local_address = Just "localhost"
+
+nodeStartup addr = do
   -- get database address
   pipe <- dbConnect
   -- launch consensus part of node (it will be responsible for storing new blocks)
-  bls <- consensusHandshake pipe
+  bls <- consensusHandshake pipe addr
   n <- Consensus.name
-  let config = Conf { address = Consensus.spread_address , port = Consensus.spread_port, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
+  let config = Conf { address = addr , port = Consensus.spread_port, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
   spread_con <- connect config
   maybe 
     (do
@@ -35,12 +38,12 @@ nodeStartup = do
     (\justBls -> do
       cache <- newTVarIO $ mkCache (snd spread_con) 1000 1 justBls 
       serving_tid <- servingVein pipe cache
-      consensus_tid <- consensusVein spread_con pipe cache
+      consensus_tid <- consensusVein spread_con pipe cache 
       listenExit spread_con serving_tid consensus_tid ) 
     bls
 
 -- | Communicates with other nodes (via spread) to reach a consensus on the BlockChain
-consensusVein spread_con pipe cache = forkIO $ startConsensus spread_con pipe cache
+consensusVein spread_con pipe cache = forkIO $ startConsensus spread_con pipe cache 
 
 servingVein dbPipe cache = do
   -- launch REST API to communicate with clients
@@ -62,6 +65,3 @@ isThreadStatusBlocked _ = False
 
 isAlive :: ThreadId -> IO Bool
 isAlive = fmap (liftM2 (||) (ThreadRunning ==) isThreadStatusBlocked) . threadStatus
-
-debugVein = undefined
-  -- logger with remote access? (http page maybe)
