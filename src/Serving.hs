@@ -58,6 +58,17 @@ runApiServer pipe cache = do
                 (parseParam uname)
 
         -- get group by identifier
+        get "/transactions/:identifier" $ do
+           ident' <- param "identifier"
+           either 
+               (const $ status badRequest400) 
+               (\x -> do 
+                   res <- liftAndCatchIO $ fetchTransaction cache pipe x
+                   maybe (status notFound404) (json) res
+               ) 
+               (parseParam ident')
+               
+        -- get group by identifier
         get "/groups/:identifier" $ do
            ident' <- param "identifier"
            either 
@@ -105,7 +116,7 @@ runApiServer pipe cache = do
            case af of
                Just x -> (liftAndCatchIO $ regTransaction cache pipe x) >>= (\res -> if res then status ok200 else status badRequest400)
                Nothing -> status badRequest400
-
+        
         -- get block by index
         get "/blockchain/byIndex/:blockIndex" $ do
             blockIndex <- param "blockIndex"

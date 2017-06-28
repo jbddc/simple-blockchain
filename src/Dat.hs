@@ -5,6 +5,7 @@ import qualified Data.Map.Strict as Map
 import Time.Types
 import Data.Aeson
 import Data.Bson.Generic
+import Data.Typeable
 import GHC.Generics
 import Crypto.Hash as Cryp
 import qualified Data.ByteString.Char8 as C8
@@ -21,8 +22,8 @@ instance FromJSON Record
 instance ToBSON Record
 instance FromBSON Record
 
-data ValueByUser = ValueByUser String String
-  deriving (Generic,Show,Eq)
+data ValueByUser = ValueByUser { person :: String, amount :: Double }
+  deriving (Generic, Typeable, Show,Eq)
 
 instance ToJSON ValueByUser 
 instance FromJSON ValueByUser

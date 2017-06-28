@@ -13,6 +13,7 @@ module BlockChain ( runQuery
     , blockBucket
     , spread_con
     , mkCache
+    , fetchTransaction
     , fetchUser
     , fetchGroup
     , addFriend
@@ -58,6 +59,10 @@ getGroup :: Queue G.Group -> String -> Maybe G.Group
 getGroup (Queue [] _) _ = Nothing
 getGroup (Queue l _) gr = L.find (\x -> if (G.ident x) == gr then True else False) l
 
+getTrans :: Queue Transaction -> String -> Maybe Transaction
+getTrans (Queue [] _) _ = Nothing
+getTrans (Queue l _) tr = L.find (\x -> if (chksum x) == tr then True else False) l
+
 pop :: Queue a -> (Maybe a,Queue a)
 pop (Queue [] size) = (Nothing, Queue [] size)
 pop (Queue (x:xs) size) = (Just x,Queue xs size)
@@ -77,12 +82,13 @@ data Cache = Cache {
   spread_con :: !(Spread.Connection),
   usersCache :: !(Queue User) ,
   groupsCache :: !(Queue G.Group) ,
+  transCache :: !(Queue Transaction),
   blockBucket :: BlockBuilder,
   attempted_blocks :: ![Block]
 }
 
 mkCache :: Spread.Connection -> Int -> Int -> Block -> Cache
-mkCache sconn x s b = Cache { spread_con = sconn, usersCache = mkQueue x, groupsCache = mkQueue x, blockBucket = newBB b s, attempted_blocks = []}
+mkCache sconn x s b = Cache { spread_con = sconn, usersCache = mkQueue x, groupsCache = mkQueue x, transCache = mkQueue x, blockBucket = newBB b s, attempted_blocks = []}
 
 ---- /Simple Queue implementation ----
 
@@ -130,6 +136,11 @@ update_cache_replace found_user cache = atomically $ do
   let new_uc = pushReplace (usersCache _cache) found_user
   let newCache = _cache { usersCache = new_uc }
   writeTVar cache newCache
+update_cache_t found_trans cache = atomically $ do
+  _cache <- readTVar cache
+  let new_tc = push (transCache _cache) found_trans
+  let newCache =  _cache { transCache = new_tc }
+  writeTVar cache newCache
 update_cache_g found_group cache = atomically $ do
   _cache <- readTVar cache
   let new_gc = push (groupsCache _cache) found_group
@@ -142,6 +153,8 @@ update_cache found_user@(User {}) cache = atomically $ do
   writeTVar cache newCache
 checkTrans g (T (Transaction { Dat.group = _g , Dat.chksum = ck })) = if g==_g then ck else ""
 checkTrans _ _ = ""
+checkTrans2 tr (T (Transaction {Dat.chksum = ck})) = if ck==tr then True else False
+checkTrans2 _ _ = False
 checkRegG gr (GR (GroupRegister {identifier = x})) = if x==gr then True else False
 checkRegG _ _ = False
 checkReg usr (UR (UserRegister {name = x})) = if x==usr then True else False
@@ -209,6 +222,22 @@ fetchUser cache pipe usr = do
         update_cache_replace found_user cache
         encodeResp found_user
     encodeResp (User { uname = u , memberGroups = g , blockstamp = stamp , friendsList = fl }) = return (Just $ UserResponse { username = u , groups = g , bstamp = stamp , flist = fl })
+
+fetchTransaction :: TVar Cache -> Pipe -> String -> IO (Maybe Transaction)
+fetchTransaction cache pipe tr = do 
+    _cache <- readTVarIO cache
+    maybe (checkDatabase _cache tr) (return . Just) (getTrans (transCache _cache) tr)
+  where
+    checkDatabase _cache tr = do
+      blocks <- runQuery pipe getBlocks
+      let dats = concat $ map dat blocks
+      let transReg = L.find (checkTrans2 tr) dats
+      case transReg of
+        Just (T t@(Transaction {})) -> do
+          let found_trans = t 
+          update_cache_t found_trans cache
+          return (Just found_trans)
+        _ -> return Nothing
 
 fetchGroup :: TVar Cache -> Pipe -> String -> IO (Maybe G.Group)
 fetchGroup cache pipe gr = do 

@@ -9,13 +9,13 @@ Authorization: Basic none none
 
 ###
 
-GET http://localhost:9000/users/rui
+GET http://localhost:9000/users/bernardo
 Authorization: Basic bernardo 1234
 
 ###
 
 GET http://localhost:9000/users/tiago/0
-Authorization: Basic tiago 1234
+Authorization: Basic bernardo 1234
 
 ###
 POST http://localhost:9000/groupreg
@@ -30,7 +30,7 @@ Authorization: Basic bernardo 1234
 }
 
 ###
-GET http://localhost:9000/groups/group11498686051s448
+GET http://localhost:9000/groups/group11498689930s77
 Authorization: Basic bernardo 1234
 
 ###
@@ -77,8 +77,12 @@ Authorization: Basic bernardo 1234
 
 {
     "usr":"bernardo",
-    "grp":"group11498686051s448",
+    "grp":"group11498689930s77",
     "vals":[["bernardo","10"]],
     "msg":"transaction example",
     "ts":"1234s"
 }
+
+###
+GET http://localhost:9000/transactions/b147a21493c449dc741fbee64982d05c70b606d155e08b83a8dc625ba43a9300
+Authorization: Basic bernardo 1234
