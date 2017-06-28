@@ -14,7 +14,7 @@ Authorization: Basic bernardo 1234
 
 ###
 
-GET http://localhost:9000/users/tiago/0
+GET http://localhost:9000/users/bernardo/3
 Authorization: Basic bernardo 1234
 
 ###
@@ -30,7 +30,7 @@ Authorization: Basic bernardo 1234
 }
 
 ###
-GET http://localhost:9000/groups/group11498689930s77
+GET http://localhost:9000/groups/group11498690805s169
 Authorization: Basic bernardo 1234
 
 ###
@@ -77,8 +77,10 @@ Authorization: Basic bernardo 1234
 
 {
     "usr":"bernardo",
-    "grp":"group11498689930s77",
-    "vals":[["bernardo","10"]],
+    "grp":"group11498690805s169",
+    "vals": [
+        { "person":"bernardo","amount":10 }
+        ],
     "msg":"transaction example",
     "ts":"1234s"
 }

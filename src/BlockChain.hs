@@ -13,6 +13,8 @@ module BlockChain ( runQuery
     , blockBucket
     , spread_con
     , mkCache
+    , fetchUserFromBlock
+    , fetchGroupFromBlock
     , fetchTransaction
     , fetchUser
     , fetchGroup
@@ -191,6 +193,19 @@ userLogin cache pipe usr p = do
         _ -> return False
     encodeResp (User { uname = u , password = pw }) = return (u == usr && pw == p)
 
+fetchUserFromBlock :: TVar Cache -> Pipe -> String -> Int -> IO (Maybe UserResponse)
+fetchUserFromBlock cache pipe usr bl_id = do
+    blocks <- runQuery pipe (getBlocksFrom (fromIntegral bl_id))
+    curr_block <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
+    let dats = concat $ map dat blocks
+    let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
+    let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
+    let found_user = User {uname = usr, password = "", memberGroups = gs, blockstamp = show curr_block, friendsList = fl}
+    encodeResp found_user
+  where matcher (Just (UR a)) = Just a 
+        matcher _ = Nothing
+        encodeResp (User { uname = u , memberGroups = g , blockstamp = stamp , friendsList = fl }) = return (Just $ UserResponse { username = u , groups = g , bstamp = stamp , flist = fl })
+
 fetchUser :: TVar Cache -> Pipe -> String -> IO (Maybe UserResponse)
 fetchUser cache pipe usr = do 
     _cache <- readTVarIO cache
@@ -238,6 +253,19 @@ fetchTransaction cache pipe tr = do
           update_cache_t found_trans cache
           return (Just found_trans)
         _ -> return Nothing
+
+fetchGroupFromBlock :: TVar Cache -> Pipe -> String -> Int -> IO (Maybe G.Group)
+fetchGroupFromBlock cache pipe gr bl_id = do
+    blocks <- runQuery pipe (getBlocksFrom (fromIntegral bl_id))
+    curr_block <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
+    let dats = concat $ map dat blocks
+    let trans = filter (/="") $ map (checkTrans gr) dats
+    let _groupReg = L.find (checkRegG gr) dats
+    let groupReg = matcher _groupReg
+    let found_group = maybe (G.G { G.ident = "-1", G.name = "-1", G.users = [] , G.transactions = trans, G.desc = "-1", G.bstamp = show $ curr_block }) (\_g -> G.G { G.ident = (identifier _g), G.name = (gname _g) , G.users = (users _g), G.transactions = trans, G.desc = (description _g) , G.bstamp = show $ curr_block }) groupReg
+    return $ Just found_group
+  where matcher (Just (GR a)) = Just a 
+        matcher _ = Nothing
 
 fetchGroup :: TVar Cache -> Pipe -> String -> IO (Maybe G.Group)
 fetchGroup cache pipe gr = do 

@@ -54,7 +54,7 @@ runApiServer pipe cache = do
             block <- param "block"
             either 
                 (const $ status badRequest400)
-                (\x -> either (const $ status badRequest400) (\y -> liftAndCatchIO $ putStrLn $ "Uname: "++x++" Block: "++y) (parseParam block))
+                (\x -> either (const $ status badRequest400) (\y -> do {res <- liftAndCatchIO $ fetchUserFromBlock cache pipe x y; maybe (status notFound404) json res}) (parseParam block))
                 (parseParam uname)
 
         -- get group by identifier
@@ -84,7 +84,7 @@ runApiServer pipe cache = do
             block <- param "block"
             either 
                 (const $ status badRequest400)
-                (\x -> either (const $ status badRequest400) (\y -> liftAndCatchIO $ putStrLn $ "Uname: "++x++" Block: "++y) (parseParam block))
+                (\x -> either (const $ status badRequest400) (\y -> do { res <- liftAndCatchIO $ fetchGroupFromBlock cache pipe x y ; maybe (status notFound404) json res }) (parseParam block))
                 (parseParam ident')
        
         post "/groupreg" $ do
