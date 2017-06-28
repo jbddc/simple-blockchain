@@ -23,13 +23,14 @@ Content-Type: application/json
 Authorization: Basic tiago 1234
 
 {
-    "identifier":"group1",
+    "identifier": "",
+    "gname":"group1",
     "description":"Apartment",
     "users": ["tiago"]
 }
 
 ###
-GET http://localhost:9000/groups/group1
+GET http://localhost:9000/groups/group11498664365s485
 Authorization: Basic tiago 1234
 
 ###

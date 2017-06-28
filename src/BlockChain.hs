@@ -27,6 +27,7 @@ import Data.SecureMem
 import qualified Data.List as L (find)
 import Control.Concurrent.STM
 import qualified Data.List as L
+import System.Random
 import Database.MongoDB
 import Data.Bson.Generic
 
@@ -188,8 +189,8 @@ fetchUser cache pipe usr = do
       let last_block_idx = read $ blockstamp justUsr
       db_last_block <- maybe (error "Database error!") id `fmap` runQuery pipe getLastBlock
       let db_last_block_idx = fromIntegral $ Block.index db_last_block
-      if last_block_idx == db_last_block_idx then encodeResp justUsr else do
-        blocks <- getBlocksFromTo pipe last_block_idx db_last_block_idx
+      if last_block_idx >= db_last_block_idx then encodeResp justUsr else do
+        blocks <- getBlocksFromTo pipe (last_block_idx+1) db_last_block_idx
         let dats = concat $ map dat blocks
         let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
         let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
@@ -230,10 +231,10 @@ fetchGroup cache pipe gr = do
       let dats = concat $ map dat blocks
       let groupReg = L.find (checkRegG gr) dats
       case groupReg of
-        Just (GR (GroupRegister { identifier = gname, description = descrip, users = usrs0 })) -> do
+        Just (GR (GroupRegister { gname = g_name , identifier = ide, description = descrip, users = usrs0 })) -> do
           let trans = [] 
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-          let found_group = G.G { G.ident = gname , G.users = usrs0, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
+          let found_group = G.G { G.ident = ide , G.name = g_name , G.users = usrs0, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
           update_cache_g found_group uc gc bb cache
           encodeResp found_group
         _ -> return Nothing
@@ -241,8 +242,8 @@ fetchGroup cache pipe gr = do
       let last_block_idx = read $ G.bstamp justGroup
       db_last_block <- maybe (error "Database error!") id `fmap` runQuery pipe getLastBlock
       let db_last_block_idx = fromIntegral $ Block.index db_last_block
-      if last_block_idx == db_last_block_idx then encodeResp justGroup else do
-        blocks <- getBlocksFromTo pipe last_block_idx db_last_block_idx
+      if last_block_idx >= db_last_block_idx then encodeResp justGroup else do
+        blocks <- getBlocksFromTo pipe (last_block_idx+1) db_last_block_idx
         let dats = concat $ map dat blocks
         let trans = [] 
         let found_group = justGroup { G.users = (G.users justGroup), G.transactions = trans++(G.transactions justGroup), G.bstamp = show $ Block.index db_last_block}
@@ -252,20 +253,16 @@ fetchGroup cache pipe gr = do
 
 registerGroup :: TVar Cache -> Pipe -> GroupRegister -> IO Bool
 registerGroup cache pipe gr = do
-  g <- fetchGroup cache pipe (identifier gr)
-  case g of
-    Just x -> return False
-    Nothing -> do
-      Cache { usersCache = uc, groupsCache = gc, blockBucket = b } <- readTVarIO cache
-      either 
-        (\ bb -> atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = bb}) ) 
-        (\newBlock -> do
-           _ <- runQuery pipe (insertBlock newBlock)
-           let new_bb = newBB newBlock (size b)
-           atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = new_bb }) 
-        ) 
-        (addRec (GR gr) b)
-      return True
+  Cache { usersCache = uc, groupsCache = gc, blockBucket = b } <- readTVarIO cache
+  either 
+    (\ bb -> atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = bb}) ) 
+    (\newBlock -> do
+       _ <- runQuery pipe (insertBlock newBlock)
+       let new_bb = newBB newBlock (size b)
+       atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = new_bb }) 
+    ) 
+    (addRec (GR gr) b)
+  return True
 
 regUser :: TVar Cache -> Pipe -> UserRegister -> IO Bool
 regUser cache pipe ureg = do

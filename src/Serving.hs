@@ -13,6 +13,8 @@ import Network.Wai.Internal (pathInfo)
 import Network.HTTP.Types.Status (ok200, accepted202, badRequest400, notFound404, conflict409, internalServerError500)
 import BlockChain
 import Control.Monad
+import System.Random
+import Time.System
 import System.IO.Unsafe
 import System.IO
 import qualified Data.Text.Lazy as Text
@@ -76,7 +78,10 @@ runApiServer pipe cache = do
         post "/groupreg" $ do
            greg <- Just `fmap` (jsonData :: ActionM GroupRegister) `rescue` (\_ -> status badRequest400 >> return Nothing)
            case greg of
-               Just x -> (liftAndCatchIO $ registerGroup cache pipe x) >> status ok200
+               Just x -> do
+                   n <- liftAndCatchIO $ randGroupId
+                   (liftAndCatchIO $ registerGroup cache pipe (x { identifier = (gname x)++n}))
+                   status ok200
                Nothing -> return ()
 
         post "/addfriend" $ do
@@ -109,3 +114,10 @@ runApiServer pipe cache = do
         get "/blockchain/byHash/:blockHash" $ do
             blockHash <- param "blockHash"
             either (\_ -> status internalServerError500) (\x -> do {res <- liftAndCatchIO $ runQuery pipe $ getBlockByHash x;maybe (status notFound404) (\x -> json x) res;}) (parseParam blockHash)
+
+
+randGroupId :: IO String
+randGroupId = do
+  time <- timeCurrent
+  rand <- randomRIO (0,500) :: IO Int
+  return $ show time ++ show rand

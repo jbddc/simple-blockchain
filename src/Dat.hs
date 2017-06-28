@@ -47,7 +47,8 @@ instance ToBSON Transaction
 instance FromBSON Transaction
 
 data GroupRegister = GroupRegister {
-     identifier  :: !String ,
+     identifier :: String ,
+     gname  :: !String ,
      description :: !String ,
      users       :: ![String]
     }

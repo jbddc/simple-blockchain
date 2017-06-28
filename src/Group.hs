@@ -6,11 +6,12 @@ import GHC.Generics
 import Data.Aeson
 
 data Group = G {
-    ident :: String ,
-    users :: [String] ,
-    transactions :: [String] ,
-    desc :: String ,
-    bstamp :: String
+    ident :: !String ,
+    name  :: !String ,
+    users :: ![String] ,
+    transactions :: ![String] ,
+    desc :: !String ,
+    bstamp :: !String
 }
   deriving (Generic,Show,Eq)
 
