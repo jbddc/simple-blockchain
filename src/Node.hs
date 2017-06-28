@@ -19,17 +19,15 @@ finishDBconn = Mongo.close
 
 remote_address = Just "alcetipe.dyndns.org"
 local_address = Just "localhost"
-spread_port = Just 4803
 
 nodeStartup addr = do
   -- get database address
   pipe <- dbConnect
   -- launch consensus part of node (it will be responsible for storing new blocks)
   n <- Consensus.name
-  let config = Conf { address = addr , port = spread_port, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
+  let config = Conf { address = addr , port = Consensus.spread_port, desiredName = n, priority = False, groupMembership = True, authMethods = [] }
   spread_con <- connect config
-  Spread.Client.join Consensus.group (snd spread_con)
-  bls <- consensusHandshake pipe addr spread_con
+  bls <- consensusHandshake pipe addr
   maybe 
     (do
       _ <- runQuery pipe (insertBlock genesis) 

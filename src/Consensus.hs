@@ -23,6 +23,7 @@ type Bucket = TVar Block.BlockBuilder
 
 data BlockParseResult = HashMismatch | IndexMismatch | DatabaseError | OK
 
+spread_port = Just 4803
 
 group :: PrivateGroup
 group = fromJust $ makeGroup "consensus"
@@ -118,6 +119,7 @@ name = do
 
 startConsensus :: (Chan R Message,Connection) -> Mongo.Pipe -> TVar Cache -> IO ()
 startConsensus (chan,conn) pipe cache = do
+  join Consensus.group conn
   startReceive conn
   (numMembers,blocksMap) <- getNumMembers Map.empty chan
   if numMembers <= 1
@@ -154,17 +156,23 @@ startConsensus (chan,conn) pipe cache = do
           listenNetworkBlocks pipe cache (chan,conn)
           disconnect conn
 
-consensusHandshake :: Mongo.Pipe -> Maybe String -> (Chan R Message,Connection) -> IO (Maybe Block.Block)
-consensusHandshake pipe addr (chan,conn) = do
+consensusHandshake :: Mongo.Pipe -> Maybe String -> IO (Maybe Block.Block)
+consensusHandshake pipe addr = do
+    -- criar nome temporario
+    tempName <- Consensus.name
     -- obter o bloco mais recente 
     currentIndex <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
     putStr  "Most recent network block: Index #" >> print currentIndex
     -- establish connection
+    let config = Conf { address = addr , port = spread_port, desiredName = tempName, priority = False, groupMembership = True, authMethods = [] }
+    (chan,conn) <- connect config
+    join Consensus.group conn
     startReceive conn
     (numMembers,_) <- getNumMembers Map.empty chan 
     putStr  "Number of Nodes in Network: " >> print numMembers
     if numMembers <= 1 
       then do
+        disconnect conn
         putStrLn "Leaving..."
         -- retornar ultimo bloco actual para dar startup à cache
         runQuery pipe getLastBlock
@@ -177,12 +185,12 @@ consensusHandshake pipe addr (chan,conn) = do
         case index > currentIndex of
           True -> do
             syncFromTo Map.empty pipe (currentIndex+1) index (chan,conn)
-            stopReceive conn
+            disconnect conn
             putStrLn "Sync done!"
             runQuery pipe getLastBlock
           _ -> do 
+            disconnect conn
             putStrLn "Sync done!"
-            stopReceive conn
             runQuery pipe getLastBlock
 
 getNumMembers :: Map.Map Integer Block.Block -> Chan R Message -> IO (Int,Map.Map Integer Block.Block)
