@@ -9,7 +9,9 @@ module BlockChain ( runQuery
     , getBlocksFrom
     , getLastBlock
     , Cache
+    , attempted_blocks
     , blockBucket
+    , spread_con
     , mkCache
     , fetchUser
     , fetchGroup
@@ -25,10 +27,13 @@ import User
 import qualified Group as G
 import Data.Maybe
 import Data.SecureMem
+import Data.Aeson (encode)
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.List as L (find)
 import Control.Concurrent.STM
 import qualified Data.List as L
 import System.Random
+import qualified Spread.Client as Spread
 import Database.MongoDB
 import Data.Bson.Generic
 
@@ -68,14 +73,15 @@ push (Queue l size) x
   | otherwise = Queue (x:l) size
 
 data Cache = Cache {
+  spread_con :: !(Spread.Connection),
   usersCache :: !(Queue User) ,
   groupsCache :: !(Queue G.Group) ,
-  blockBucket :: BlockBuilder
+  blockBucket :: BlockBuilder,
+  attempted_blocks :: ![Block]
 }
- deriving (Show)
 
-mkCache :: Int -> Int -> Block -> Cache
-mkCache x s b = Cache { usersCache = mkQueue x, groupsCache = mkQueue x, blockBucket = newBB b s}
+mkCache :: Spread.Connection -> Int -> Int -> Block -> Cache
+mkCache sconn x s b = Cache { spread_con = sconn, usersCache = mkQueue x, groupsCache = mkQueue x, blockBucket = newBB b s, attempted_blocks = []}
 
 ---- /Simple Queue implementation ----
 
@@ -123,13 +129,15 @@ update_cache_replace found_user cache = atomically $ do
   let new_uc = pushReplace (usersCache _cache) found_user
   let newCache = _cache { usersCache = new_uc }
   writeTVar cache newCache
-update_cache_g found_group uc gc bb cache = atomically $ do
-  let new_gc = push gc found_group
-  let newCache = Cache { usersCache = uc, groupsCache = new_gc , blockBucket = bb}
+update_cache_g found_group cache = atomically $ do
+  _cache <- readTVar cache
+  let new_gc = push (groupsCache _cache) found_group
+  let newCache =  _cache { groupsCache = new_gc }
   writeTVar cache newCache
-update_cache found_user@(User {}) uc gc bb cache = atomically $ do
-  let new_uc = push uc found_user
-  let newCache = Cache { usersCache = new_uc , groupsCache = gc, blockBucket = bb }
+update_cache found_user@(User {}) cache = atomically $ do
+  _cache <- readTVar cache
+  let new_uc = push (usersCache _cache) found_user
+  let newCache = _cache { usersCache = new_uc }
   writeTVar cache newCache
 checkRegG gr (GR (GroupRegister {identifier = x})) = if x==gr then True else False
 checkRegG _ _ = False
@@ -145,12 +153,14 @@ filterGroupIds (GR (GroupRegister {identifier = x})) = Just x
 filterGroupIds _ = Nothing
 --- //// ---
 
+-- GET
+
 userLogin :: TVar Cache -> Pipe -> String -> String -> IO Bool
 userLogin cache pipe usr p = do 
-    (Cache { usersCache = uc , groupsCache = gc, blockBucket = bb }) <- readTVarIO cache
-    maybe (checkDatabase uc gc bb) encodeResp (getUser uc usr)
+    _cache <- readTVarIO cache
+    maybe (checkDatabase _cache) encodeResp (getUser (usersCache _cache) usr)
   where
-    checkDatabase uc gc bb = do
+    checkDatabase _cache = do
       blocks <- runQuery pipe getBlocks
       let dats = concat $ map dat blocks
       let userReg = L.find (checkReg usr) dats
@@ -158,20 +168,19 @@ userLogin cache pipe usr p = do
         Just (UR (UserRegister { pw = pwd })) -> do
           let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-          -- WARNING: IMPLEMENT FRIEND LIST
           let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
           let found_user = User { uname = usr , password = pwd , memberGroups = gs , friendsList = fl , blockstamp = show cur_block_nr }
-          update_cache found_user uc gc bb cache
+          update_cache found_user cache
           encodeResp found_user
         _ -> return False
     encodeResp (User { uname = u , password = pw }) = return (u == usr && pw == p)
 
 fetchUser :: TVar Cache -> Pipe -> String -> IO (Maybe UserResponse)
 fetchUser cache pipe usr = do 
-    (Cache { usersCache = uc , groupsCache = gc , blockBucket = bb}) <- readTVarIO cache
-    maybe (checkDatabase uc gc bb) (updateCache pipe cache) (getUser uc usr)
+    _cache <- readTVarIO cache
+    maybe (checkDatabase) (updateCache pipe cache) (getUser (usersCache _cache) usr)
   where
-    checkDatabase uc gc bb = do
+    checkDatabase = do
       blocks <- runQuery pipe getBlocks
       let dats = concat $ map dat blocks
       let userReg = L.find (checkReg usr) dats
@@ -179,10 +188,9 @@ fetchUser cache pipe usr = do
         Just (UR (UserRegister { pw = pwd })) -> do
           let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
-          -- WARNING: IMPLEMENT FRIEND LIST
           let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
           let found_user = User { uname = usr , password = pwd , memberGroups = gs , friendsList = fl , blockstamp = show cur_block_nr }
-          update_cache found_user uc gc bb cache
+          update_cache found_user cache
           encodeResp found_user
         _ -> return Nothing
     updateCache pipe cache justUsr = do
@@ -199,34 +207,12 @@ fetchUser cache pipe usr = do
         encodeResp found_user
     encodeResp (User { uname = u , memberGroups = g , blockstamp = stamp , friendsList = fl }) = return (Just $ UserResponse { username = u , groups = g , bstamp = stamp , flist = fl })
 
-
-addFriend :: TVar Cache -> Pipe -> AddFriend -> IO Bool
-addFriend cache pipe af = do
-  usr <- fetchUser cache pipe (user_id af)
-  case usr of
-    Nothing -> return False
-    Just (UserResponse { flist = fl }) -> do
-      if (friend_id af) `elem` fl then return False else do
-        friend <- fetchUser cache pipe (friend_id af)
-        if isNothing friend then return False else do
-          _cache <- readTVarIO cache
-          either
-            (\ bb -> atomically $ writeTVar cache (_cache { blockBucket = bb }))
-            (\newBlock -> do
-               _ <- runQuery pipe (insertBlock newBlock)
-               let new_bb = newBB newBlock (size (blockBucket _cache))
-               atomically $ writeTVar cache (_cache { blockBucket = new_bb }) 
-            ) 
-            (addRec (AF af) (blockBucket _cache))
-          return True
-
-
 fetchGroup :: TVar Cache -> Pipe -> String -> IO (Maybe G.Group)
 fetchGroup cache pipe gr = do 
-    (Cache { usersCache = uc , groupsCache = gc , blockBucket = bb}) <- readTVarIO cache
-    maybe (checkDatabase uc gc bb) (updateCache pipe cache) (getGroup gc gr)
+    _cache <- readTVarIO cache
+    maybe (checkDatabase _cache gr) (updateCache pipe cache) (getGroup (groupsCache _cache) gr)
   where
-    checkDatabase uc gc bb = do
+    checkDatabase _cache gr = do
       blocks <- runQuery pipe getBlocks
       let dats = concat $ map dat blocks
       let groupReg = L.find (checkRegG gr) dats
@@ -235,7 +221,7 @@ fetchGroup cache pipe gr = do
           let trans = [] 
           cur_block_nr <- ((flip (-)) 1) `fmap` runQuery pipe getNrBlocks
           let found_group = G.G { G.ident = ide , G.name = g_name , G.users = usrs0, G.transactions = trans, G.desc = descrip, G.bstamp = show cur_block_nr }
-          update_cache_g found_group uc gc bb cache
+          update_cache_g found_group cache
           encodeResp found_group
         _ -> return Nothing
     updateCache pipe cache justGroup = do
@@ -251,17 +237,45 @@ fetchGroup cache pipe gr = do
         encodeResp found_group
     encodeResp g = return (Just g)
 
+-- POST
+
+addFriend :: TVar Cache -> Pipe -> AddFriend -> IO Bool
+addFriend cache pipe af = do
+  usr <- fetchUser cache pipe (user_id af)
+  case usr of
+    Nothing -> return False
+    Just (UserResponse { flist = fl }) -> do
+      if (friend_id af) `elem` fl then return False else do
+        friend <- fetchUser cache pipe (friend_id af)
+        if isNothing friend then return False else do
+          _cache <- readTVarIO cache
+          either
+            (\ bb -> atomically $ writeTVar cache (_cache { blockBucket = bb }))
+            (\newBlock -> do
+               sendBlock (spread_con _cache) newBlock
+               let new_bb = newBB newBlock (size (blockBucket _cache))
+               atomically $ do
+                 _c <- readTVar cache
+                 let _atb = attempted_blocks _c
+                 writeTVar cache (_c { blockBucket = new_bb, attempted_blocks = newBlock:_atb }) 
+            ) 
+            (addRec (AF af) (blockBucket _cache))
+          return True
+
 registerGroup :: TVar Cache -> Pipe -> GroupRegister -> IO Bool
 registerGroup cache pipe gr = do
-  Cache { usersCache = uc, groupsCache = gc, blockBucket = b } <- readTVarIO cache
+  _cache <- readTVarIO cache
   either 
-    (\ bb -> atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = bb}) ) 
+    (\ bb -> atomically $ writeTVar cache (_cache { blockBucket = bb}) ) 
     (\newBlock -> do
-       _ <- runQuery pipe (insertBlock newBlock)
-       let new_bb = newBB newBlock (size b)
-       atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = new_bb }) 
+       sendBlock (spread_con _cache) newBlock
+       let new_bb = newBB newBlock (size (blockBucket _cache))
+       atomically $ do
+         _c <- readTVar cache
+         let _atb = attempted_blocks _c
+         writeTVar cache (_c { blockBucket = new_bb, attempted_blocks = newBlock:_atb }) 
     ) 
-    (addRec (GR gr) b)
+    (addRec (GR gr) (blockBucket _cache))
   return True
 
 regUser :: TVar Cache -> Pipe -> UserRegister -> IO Bool
@@ -270,13 +284,24 @@ regUser cache pipe ureg = do
   case usr of
     Just x -> return False
     Nothing -> do
-      Cache { usersCache = uc, groupsCache = gc, blockBucket = b } <- readTVarIO cache
+      _cache <- readTVarIO cache
       either
-        (\ bb -> atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = bb}))
+        (\ bb -> atomically $ writeTVar cache (_cache { blockBucket = bb }))
         (\newBlock -> do
-          _ <- runQuery pipe (insertBlock newBlock)
-          let new_bb = newBB newBlock (size b)
-          atomically $ writeTVar cache (Cache { usersCache = uc, groupsCache = gc, blockBucket = new_bb})
+           sendBlock (spread_con _cache) newBlock
+           let new_bb = newBB newBlock (size (blockBucket _cache))
+           atomically $ do
+             _c <- readTVar cache
+             let _atb = attempted_blocks _c
+             writeTVar cache (_c { blockBucket = new_bb, attempted_blocks = newBlock:_atb }) 
         )
-        (addRec (UR ureg) b)
+        (addRec (UR ureg) (blockBucket _cache))
       return True
+
+sendBlock :: Spread.Connection -> Block.Block -> IO ()
+sendBlock conn block = do
+  let msg = Spread.Outgoing {Spread.outOrdering = Spread.Fifo, Spread.outDiscard = False, Spread.outData = BSL.toStrict $ encode block, Spread.outGroups = [_group], Spread.outMsgType = 1}
+  Spread.send msg conn
+
+_group :: Spread.PrivateGroup
+_group = fromJust $ Spread.makeGroup "consensus"

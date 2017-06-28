@@ -28,12 +28,12 @@ nodeStartup = do
   maybe 
     (do
       _ <- runQuery pipe (insertBlock genesis) 
-      cache <- newTVarIO $ mkCache 1000 1 genesis 
+      cache <- newTVarIO $ mkCache (snd spread_con) 1000 1 genesis 
       serving_tid <- servingVein pipe cache
       consensus_tid <- consensusVein spread_con pipe cache
       listenExit spread_con serving_tid consensus_tid ) 
     (\justBls -> do
-      cache <- newTVarIO $ mkCache 1000 1 justBls 
+      cache <- newTVarIO $ mkCache (snd spread_con) 1000 1 justBls 
       serving_tid <- servingVein pipe cache
       consensus_tid <- consensusVein spread_con pipe cache
       listenExit spread_con serving_tid consensus_tid ) 

@@ -3,14 +3,14 @@ Content-Type: application/json
 Authorization: Basic none none
 
 { 
-    "name":"tiago", 
+    "name":"bernardo", 
     "pw":"1234"
 }
 
 ###
 
-GET http://localhost:9000/users/tiago
-Authorization: Basic tiago 1234
+GET http://localhost:9000/users/bernardo
+Authorization: Basic bernardo 1234
 
 ###
 

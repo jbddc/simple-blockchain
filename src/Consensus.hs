@@ -48,7 +48,7 @@ listenNetworkBlocks pipe cache (chan,conn) = do
         -- new block arrives
         1 -> do
           let mBlock = decode $ BSL.fromStrict $ inData inMsg
-          maybe (return ()) (processNewBlock pipe) mBlock
+          maybe (return ()) (processNewBlock pipe cache) mBlock
         -- request for block by index
         2 -> do
           let blockIndex = read $ B.unpack $ inData inMsg
@@ -64,7 +64,7 @@ listenNetworkBlocks pipe cache (chan,conn) = do
         typ -> putStrLn $ "TODO Msg Type: "++(show typ)
     Just (Membership memMsg) -> putStrLn $ show $ numMembers memMsg
     Nothing -> putStrLn "Lost connection to Spread Daemon, press [enter] to acknowledge this message and quit..." >> disconnect conn >>= const exitFailure
-    _ -> putStrLn "TODO"  
+    a -> putStrLn "Unknown Type Message Recieved: " >> print a  
   listenNetworkBlocks pipe cache (chan,conn)
 
 randomFalseTrue :: IO Bool
@@ -72,10 +72,35 @@ randomFalseTrue = do
   percent <- randomRIO (0,100) :: IO Int
   return (percent > 60)
 
-processNewBlock :: Mongo.Pipe -> Block.Block -> IO ()
-processNewBlock pipe block = do
-  _ <- runQuery pipe getLastBlock
-  print "TODO"
+processNewBlock :: Mongo.Pipe -> TVar Cache -> Block.Block -> IO ()
+processNewBlock pipe cache block = do
+    last_block <- runQuery pipe getLastBlock
+    maybe (error "Database corrupted! Clear it and restart node to sync...") (checkAndInsert pipe cache block) last_block
+
+checkAndInsert pipe cache block last_block = if (Block.blockHash last_block /= Block.prevHash block)
+  then do 
+    putStrLn "Block received but ignored: prevHash mismatch."
+    __cache <- readTVarIO cache
+    case block `elem` (attempted_blocks __cache) of
+      True -> do
+        _bl <- runQuery pipe getLastBlock
+        let bl = maybe (error "Database error! Restart node...") id _bl
+        conn <- spread_con `fmap` readTVarIO cache
+        let new_block = Block.createNewBlock (Block.dat block) bl
+        sendBlock conn new_block
+        atomically $ do
+          _cache <- readTVar cache
+          let updated_ab = Prelude.filter (/=block) (attempted_blocks _cache)
+          writeTVar cache (_cache { attempted_blocks = new_block:updated_ab})
+      _ -> return ()
+  else do
+    runQuery pipe (insertBlock block)
+    putStrLn $ "Block #"++(show $ Block.index block)++" recieved from network!"
+    atomically $ do
+      _cache <- readTVar cache
+      let updated_bb = (blockBucket _cache) { Block.prevBlock = block }
+      let updated_ab = Prelude.filter (/= block) (attempted_blocks _cache)
+      writeTVar cache (_cache { blockBucket = updated_bb, attempted_blocks = updated_ab })
 
 processRecord :: Connection -> Record -> Bucket -> IO ()
 processRecord conn rec bucket = do
@@ -93,7 +118,6 @@ name = do
   let h = hash $ B.pack preH :: Digest SHA256
   return . mkPrivateName . B.pack . show $ h
 
--- WARNING: IR BUSCAR BLOCOS ATÉ AO MAIS RECENTE
 startConsensus :: (Chan R Message,Connection) -> Mongo.Pipe -> TVar Cache -> IO ()
 startConsensus (chan,conn) pipe cache = do
   join Consensus.group conn
