@@ -95,7 +95,7 @@ checkAndInsert pipe cache block last_block = if (Block.blockHash last_block /= B
       _ -> return ()
   else do
     runQuery pipe (insertBlock block)
-    putStrLn $ "Block #"++(show $ Block.index block)++" recieved from network!"
+    putStrLn $ "Block #"++(show $ Block.index block)++" received from network!"
     atomically $ do
       _cache <- readTVar cache
       let updated_bb = (blockBucket _cache) { Block.prevBlock = block }

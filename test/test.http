@@ -3,7 +3,7 @@ Content-Type: application/json
 Authorization: Basic none none
 
 { 
-    "name":"bernardo", 
+    "name":"ricardo", 
     "pw":"1234"
 }
 
