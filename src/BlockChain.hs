@@ -6,6 +6,7 @@ module BlockChain ( runQuery
     , getBlockByHash
     , getNrBlocks
     , getBlocks
+    , getBlocksFrom
     , getLastBlock
     , Cache
     , blockBucket
@@ -91,6 +92,12 @@ getBlockByIndex index = (maybe Nothing (\x -> fromBSON x :: Maybe Block)) `fmap`
 getNrBlocks :: Action IO Int
 getNrBlocks = count (select []  "blocks")
 
+getBlocksFrom :: Integer -> Action IO [Block]
+getBlocksFrom from = do
+  result <- liftDB $ find (select [] "blocks")
+  let rresult = rest result
+  (\y -> filter ((>= from) . Block.index) $ map (\x -> fromJust $ (fromBSON x :: Maybe Block)) y) `fmap` rresult
+
 getBlockByHash :: String -> Action IO (Maybe Block)
 getBlockByHash blockHash = (maybe Nothing (\x -> fromBSON x :: Maybe Block)) `fmap` findOne (select ["blockHash" =: blockHash] "blocks")
 
@@ -138,13 +145,6 @@ filterGroupIds (GR (GroupRegister {identifier = x})) = Just x
 filterGroupIds _ = Nothing
 --- //// ---
 
-getBlocksFromTo :: Pipe -> Int -> Int -> IO [Block]
-getBlocksFromTo pipe from to  
-  | from <= to = do
-    bl <- runQuery pipe (getBlockByIndex from)
-    maybe (error "Database error!") (\b -> (getBlocksFromTo pipe (from+1) to) >>= (return . (:) b)) bl
-  | otherwise = return []
-
 userLogin :: TVar Cache -> Pipe -> String -> String -> IO Bool
 userLogin cache pipe usr p = do 
     (Cache { usersCache = uc , groupsCache = gc, blockBucket = bb }) <- readTVarIO cache
@@ -190,7 +190,7 @@ fetchUser cache pipe usr = do
       db_last_block <- maybe (error "Database error!") id `fmap` runQuery pipe getLastBlock
       let db_last_block_idx = fromIntegral $ Block.index db_last_block
       if last_block_idx >= db_last_block_idx then encodeResp justUsr else do
-        blocks <- getBlocksFromTo pipe (last_block_idx+1) db_last_block_idx
+        blocks <- runQuery pipe (getBlocksFrom (fromIntegral (last_block_idx+1)))
         let dats = concat $ map dat blocks
         let gs = map fromJust $ filter (/=Nothing) $ map filterGroupIds $ filter (checkGroupReg usr) dats
         let fl = filter (/="") $ map (filterAF usr) $ filter (checkAddFriend usr) dats
@@ -243,7 +243,7 @@ fetchGroup cache pipe gr = do
       db_last_block <- maybe (error "Database error!") id `fmap` runQuery pipe getLastBlock
       let db_last_block_idx = fromIntegral $ Block.index db_last_block
       if last_block_idx >= db_last_block_idx then encodeResp justGroup else do
-        blocks <- getBlocksFromTo pipe (last_block_idx+1) db_last_block_idx
+        blocks <- runQuery pipe (getBlocksFrom (fromIntegral (last_block_idx+1)))
         let dats = concat $ map dat blocks
         let trans = [] 
         let found_group = justGroup { G.users = (G.users justGroup), G.transactions = trans++(G.transactions justGroup), G.bstamp = show $ Block.index db_last_block}
