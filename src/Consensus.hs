@@ -265,8 +265,8 @@ auxSyncFromTo blocksMap pipe from to (chan,conn)
 parseInsertBlock :: Mongo.Pipe -> Block.Block -> Int -> IO BlockParseResult
 parseInsertBlock pipe blck 0 = do
   if Block.index blck /= 0 then return IndexMismatch else do
-  runQuery pipe (insertBlock blck)
-  return OK
+    runQuery pipe (insertBlock blck)
+    return OK
 parseInsertBlock pipe blck indx = do
   if Block.index blck /= (fromIntegral indx) then return IndexMismatch else do
     mBlock <- runQuery pipe getLastBlock

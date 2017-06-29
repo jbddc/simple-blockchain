@@ -30,7 +30,7 @@ Authorization: Basic bernardo 1234
 }
 
 ###
-GET http://localhost:9000/groups/group11498690805s169
+GET http://localhost:9000/groups/group11498690805s169/5
 Authorization: Basic bernardo 1234
 
 ###
