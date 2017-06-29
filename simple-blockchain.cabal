@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     BlockChain Block Dat Serving Consensus Node
+  exposed-modules:     BlockChain Block Dat Serving Consensus Node Group User
   build-depends:       base >= 3 && < 5
                      , cryptonite >= 0.21
                      , bytestring >= 0.10
@@ -36,7 +36,33 @@ library
                      , stm
                      , securemem
                      , base64-bytestring
+  ghc-options:       -O2 
   default-language:    Haskell2010
+
+executable node
+  hs-source-dirs:    src
+  main-is:           Main.hs
+  other-modules:     BlockChain Block Dat Serving Consensus Node Group User
+  build-depends:       base >= 3 && < 5
+                     , cryptonite >= 0.21
+                     , bytestring >= 0.10
+                     , hourglass
+                     , containers
+                     , random
+                     , hspread
+                     , stm
+                     , aeson 
+                     , bson-generic 
+                     , text
+                     , mongoDB >= 2.0
+                     , scotty
+                     , http-types
+                     , wai
+                     , wai-extra
+                     , stm
+                     , base64-bytestring
+  ghc-options:       -O2
+  default-language:  Haskell2010
 
 source-repository head
   type:     git

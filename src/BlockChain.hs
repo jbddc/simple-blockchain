@@ -30,7 +30,6 @@ import Dat
 import User
 import qualified Group as G
 import Data.Maybe
-import Data.SecureMem
 import Data.Aeson (encode)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.List as L (find)

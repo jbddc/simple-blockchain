@@ -1,8 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Dat where
 
-import qualified Data.Map.Strict as Map
-import Time.Types
 import Data.Aeson
 import Data.Bson.Generic
 import Data.Typeable

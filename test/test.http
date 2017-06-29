@@ -30,7 +30,7 @@ Authorization: Basic bernardo 1234
 }
 
 ###
-GET http://localhost:9000/groups/group11498690805s169/5
+GET http://localhost:9000/groups/group11498690805s169
 Authorization: Basic bernardo 1234
 
 ###
@@ -86,5 +86,5 @@ Authorization: Basic bernardo 1234
 }
 
 ###
-GET http://localhost:9000/transactions/b147a21493c449dc741fbee64982d05c70b606d155e08b83a8dc625ba43a9300
+GET http://localhost:9000/transactions/36c119df7306620f786f4ff2788bb8b0585d6902c8013ff3a11551bb45995193
 Authorization: Basic bernardo 1234
