@@ -88,3 +88,7 @@ Authorization: Basic bernardo 1234
 ###
 GET http://localhost:9000/transactions/36c119df7306620f786f4ff2788bb8b0585d6902c8013ff3a11551bb45995193
 Authorization: Basic bernardo 1234
+
+###
+GET http://192.168.1.125:9000/blockchain/byIndex/1
+Authorization: Basic bernardo 1234
