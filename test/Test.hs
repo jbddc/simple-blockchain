@@ -108,6 +108,7 @@ tester2 threads each path = do
     _res <- mapM (\r -> do {_r <- r ; return $ either (error . show) id _r}) $ map snd tids_comps
     putStrLn "All workers: OK!"
     putStrLn $ "Total Time: "++(show $ sum _res)++" seconds."
+    putStrLn $ "Time per request: "++(show $ (sum _res) `div` (threads*each))++" seconds."
 
 launchTest2 :: Int -> String -> TVar Int -> IO Int
 launchTest2 each path var = do 
