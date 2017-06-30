@@ -30,7 +30,7 @@ treat_thread_res :: ThreadId -> Either SomeException (Int,Int) -> IO (Int,Int)
 treat_thread_res tid r = either (\exp -> print exp >> return (-1,-1)) (\res -> auxi tid res) r
 
 auxi tid res = do 
-    putStrLn $ "Thread "++(tail $ dropWhile (/=' ') $ show tid)++" executed "++(show $ fst res)++" successfully in "++(show $ snd res)++" seconds."
+    putStrLn $ "Thread "++(tail $ dropWhile (/=' ') $ show tid)++" executed "++(show $ fst res)++" requests successfully in "++(show $ snd res)++" seconds."
     return res
 
 
